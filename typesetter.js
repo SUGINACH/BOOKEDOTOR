@@ -304,7 +304,7 @@ function justifyColumnVertically(col, targetHeight, styleObj) {
   }
 }
 
-function balanceColumns(block, colWidth, styleObj, snapshot) {
+function balanceColumns(block, colWidth, styleObj, snapshot, availableHeight = Infinity) {
   if (snapshot) {
     footnoteQueueForPage.length = snapshot.footnoteQueueLen;
     endnoteQueueForPart.length = snapshot.endnoteQueueLen;
@@ -326,13 +326,14 @@ function balanceColumns(block, colWidth, styleObj, snapshot) {
       let isCont = child.getAttribute('data-is-cont') === 'true';
       let sideNote = child.getAttribute('data-side-note');
       let endNote = child.getAttribute('data-end-note');
+      let sideNoteStyleId = child.getAttribute('data-note-style-id');
       let lastItem = mergedItems[mergedItems.length - 1];
       if (lastItem && lastItem.type === 'p' && lastItem.id === id) {
          lastItem.rawText += ' ' + text;
-         if (sideNote && !lastItem.sideNote) lastItem.sideNote = sideNote;
+         if (sideNote && !lastItem.sideNote) { lastItem.sideNote = sideNote; lastItem.sideNoteStyleId = sideNoteStyleId; }
          if (endNote && !lastItem.endNote) lastItem.endNote = endNote;
       } else {
-         mergedItems.push({ type: 'p', id: id, rawText: text, isCont: isCont, sideNote: sideNote, endNote: endNote });
+         mergedItems.push({ type: 'p', id: id, rawText: text, isCont: isCont, sideNote: sideNote, endNote: endNote, sideNoteStyleId: sideNoteStyleId });
       }
     } else {
       mergedItems.push({ type: 'h', id: child.getAttribute('data-token-id'), html: child.outerHTML, level: child.className.match(/title-level-(\d+)/)?.[1] });
@@ -342,7 +343,7 @@ function balanceColumns(block, colWidth, styleObj, snapshot) {
   const items = mergedItems.map(item => {
     if (item.type === 'p') {
       let linesInfo = getLinesFromParagraph(item.rawText, colWidth, styleObj, !item.isCont);
-      return { ...item, lines: linesInfo.lines, isSingleLine: linesInfo.lines.length <= 1, hasWindow: linesInfo.hasWindow };
+      return { ...item, lines: linesInfo.lines, isSingleLine: linesInfo.lines.length <= 1, hasWindow: linesInfo.hasWindow, noteSpans: findDelimiterMatches(item.rawText, 'body') };
     }
     return item;
   });
@@ -360,8 +361,19 @@ function balanceColumns(block, colWidth, styleObj, snapshot) {
     }
   }
 
+  // לא לחתוך שורה בדיוק בתוך טווח מסומן-delimiter (למשל "[...]") של הערת-שוליים/
+  // סיום — אחרת הפתיח והסיום של אותה הערה ייפלו לשני צדי החלוקה, אף חצי לא
+  // ייסגר כראוי, וההערה תיעלם בשקט בלי סימון ובלי רישום ברשימת ההערות.
   const validSplitPoints = splitPoints.filter(sp => {
-    if (sp.lineIndex > 0) return true;
+    if (sp.lineIndex > 0) {
+      const item = items[sp.itemIndex];
+      if (item && item.noteSpans && item.noteSpans.length) {
+        const offset = sp.lines.slice(0, sp.lineIndex).join(' ').length;
+        const cutsSpan = item.noteSpans.some(m => offset > m.start && offset < m.end);
+        if (cutsSpan) return false;
+      }
+      return true;
+    }
     if (sp.itemIndex > 0 && items[sp.itemIndex - 1].type === 'h') return false;
     return true;
   });
@@ -438,6 +450,7 @@ function balanceColumns(block, colWidth, styleObj, snapshot) {
       p.setAttribute('data-is-cont', isCont ? 'true' : 'false');
       if (item.sideNote) p.setAttribute('data-side-note', item.sideNote);
       if (item.endNote) p.setAttribute('data-end-note', item.endNote);
+      if (item.sideNoteStyleId) p.setAttribute('data-note-style-id', item.sideNoteStyleId);
       
       let isSingleLine = false;
       if (!isPartial) {
@@ -483,11 +496,15 @@ function balanceColumns(block, colWidth, styleObj, snapshot) {
     appendItemFinal(lCol, lMargin, items[i], false, false, null, items[i].isCont);
   }
 
+  // איזון קוסמטי (מתיחת ריווח-שורות בטור הקצר) רק אם התוצאה עדיין נכנסת בגובה
+  // שנותר בעמוד — אחרת עלול "לדחוף" גם את הטור הקצר לתוך אזור הערות-השוליים.
   let finalDiff = rCol.scrollHeight - lCol.scrollHeight;
-  if (finalDiff > 2 && finalDiff <= 60) {
-      justifyColumnVertically(lCol, rCol.scrollHeight, styleObj);
-  } else if (finalDiff < -2 && Math.abs(finalDiff) <= 60) {
-      justifyColumnVertically(rCol, lCol.scrollHeight, styleObj);
+  if (Math.max(rCol.scrollHeight, lCol.scrollHeight) <= availableHeight) {
+    if (finalDiff > 2 && finalDiff <= 60) {
+        justifyColumnVertically(lCol, rCol.scrollHeight, styleObj);
+    } else if (finalDiff < -2 && Math.abs(finalDiff) <= 60) {
+        justifyColumnVertically(rCol, lCol.scrollHeight, styleObj);
+    }
   }
 
   finalizeNotePositions(finalNotes, Math.max(rCol.scrollHeight, lCol.scrollHeight));
@@ -538,7 +555,12 @@ function finalizeNotePositions(notesList, columnBoundaryHeight) {
   });
 }
 
-function applyDelimiterStyles(containerEl, hostContextKey, hostSizePt, isDryRun = false) {
+// מוצאת את כל טווחי ה-delimiter (למשל "[...]") בטקסט נתון, עבור הסימון
+// המובנה להערת-שוליים (fn-delim-open/close) וכל סגנונות ה-delimiterPair
+// המיובאים שמתאימים ל-hostContextKey. מוחזר מערך {start, end, inst} ממוין
+// וללא חפיפות — משמש גם ל-applyDelimiterStyles וגם ל-balanceColumns, כדי
+// שנקודת-חלוקה בין טורים לא "תחתוך" הערה כזו באמצע (ר' noteSpans).
+function findDelimiterMatches(text, hostContextKey) {
   const activeStyles = [];
 
   const fnOpen = document.getElementById('fn-delim-open')?.value?.trim();
@@ -560,7 +582,29 @@ function applyDelimiterStyles(containerEl, hostContextKey, hostSizePt, isDryRun 
     });
   }
 
-  if (!activeStyles.length) return;
+  if (!activeStyles.length) return [];
+
+  let matches = [];
+  activeStyles.forEach(inst => {
+    const trig = inst.def.trigger;
+    let searchFrom = 0;
+    while (true) {
+      const oIdx = text.indexOf(trig.open, searchFrom);
+      if (oIdx === -1) break;
+      const cIdx = text.indexOf(trig.close, oIdx + trig.open.length);
+      if (cIdx === -1) break;
+      matches.push({ start: oIdx, end: cIdx + trig.close.length, inst });
+      searchFrom = cIdx + trig.close.length;
+    }
+  });
+  matches.sort((a, b) => a.start - b.start);
+  const dedup = [];
+  let lastEnd = -1;
+  matches.forEach(m => { if (m.start >= lastEnd) { dedup.push(m); lastEnd = m.end; } });
+  return dedup;
+}
+
+function applyDelimiterStyles(containerEl, hostContextKey, hostSizePt, isDryRun = false) {
   const effHostSize = hostSizePt || 12;
 
   const walker = document.createTreeWalker(containerEl, NodeFilter.SHOW_TEXT, null, false);
@@ -570,24 +614,8 @@ function applyDelimiterStyles(containerEl, hostContextKey, hostSizePt, isDryRun 
 
   textNodes.forEach(textNode => {
     const text = textNode.textContent;
-    let matches = [];
-    activeStyles.forEach(inst => {
-      const trig = inst.def.trigger;
-      let searchFrom = 0;
-      while (true) {
-        const oIdx = text.indexOf(trig.open, searchFrom);
-        if (oIdx === -1) break;
-        const cIdx = text.indexOf(trig.close, oIdx + trig.open.length);
-        if (cIdx === -1) break;
-        matches.push({ start: oIdx, end: cIdx + trig.close.length, inst });
-        searchFrom = cIdx + trig.close.length;
-      }
-    });
-    if (!matches.length) return;
-    matches.sort((a,b) => a.start - b.start);
-    const dedup = [];
-    let lastEnd = -1;
-    matches.forEach(m => { if (m.start >= lastEnd) { dedup.push(m); lastEnd = m.end; } });
+    const dedup = findDelimiterMatches(text, hostContextKey);
+    if (!dedup.length) return;
 
     const frag = document.createDocumentFragment();
     let cursor = 0;
@@ -1676,6 +1704,7 @@ function typesetDocument() {
 
               if (!isContinuation && currentTok.sideNote) {
                 pElem.setAttribute('data-side-note', currentTok.sideNote);
+                if (currentTok.sideNoteStyleId) pElem.setAttribute('data-note-style-id', currentTok.sideNoteStyleId);
                 const noteElem = document.createElement('div');
                 noteElem.className = 'side-note-anchor';
                 noteElem.textContent = currentTok.sideNote;
@@ -1717,7 +1746,7 @@ function typesetDocument() {
         }
 
         if (tokenIndex >= secTokens.length && !pendingWordTokens) {
-          balanceColumns(block2Col, colWidth, styleObj, blockNoteSnapshot);
+          balanceColumns(block2Col, colWidth, styleObj, blockNoteSnapshot, remPageHeight);
           const divHTML = getSectionDividerHTML(secDivStyle);
           if (divHTML) {
             const divContainer = document.createElement('div');
@@ -1729,13 +1758,18 @@ function typesetDocument() {
           let nextPeekTok = pendingWordTokens ? pendingWordTokens.token : secTokens[tokenIndex];
           const nextPeekMode = nextPeekTok && nextPeekTok.type.startsWith('h') ? headingModes[nextPeekTok.level] : 'inline_2col';
           if (nextPeekMode === 'span_1col' && !pendingWordTokens) {
-            balanceColumns(block2Col, colWidth, styleObj, blockNoteSnapshot);
+            balanceColumns(block2Col, colWidth, styleObj, blockNoteSnapshot, remPageHeight);
           } else {
+            let usedBlockH = Math.max(rCol.scrollHeight, lCol.scrollHeight);
             let finalDiff = rCol.scrollHeight - lCol.scrollHeight;
-            if (finalDiff > 2 && finalDiff <= 60) {
-                justifyColumnVertically(lCol, rCol.scrollHeight, styleObj);
-            } else if (finalDiff < -2 && Math.abs(finalDiff) <= 60) {
-                justifyColumnVertically(rCol, lCol.scrollHeight, styleObj);
+            // איזון קוסמטי רק אם התוצאה עדיין נכנסת בגבול השארי בעמוד — אחרת
+            // עלול "לדחוף" גם את הטור הקצר לתוך אזור הערות-השוליים.
+            if (usedBlockH <= remPageHeight) {
+              if (finalDiff > 2 && finalDiff <= 60) {
+                  justifyColumnVertically(lCol, rCol.scrollHeight, styleObj);
+              } else if (finalDiff < -2 && Math.abs(finalDiff) <= 60) {
+                  justifyColumnVertically(rCol, lCol.scrollHeight, styleObj);
+              }
             }
           }
         }
