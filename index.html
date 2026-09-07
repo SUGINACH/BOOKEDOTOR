@@ -1,0 +1,597 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl" style="--w-col: 40%; --w-margin: 7.5%; --w-gutter: 2%; --w-gap: 2%; --flow-mt: 20px; --flow-mb: 20px; --fn-header-r: 'Livorna', serif; --sz-header-r: 15pt; --fn-header-c: 'Livorna', serif; --sz-header-c: 11pt; --fn-header-l: 'Livorna', serif; --sz-header-l: 15pt; --fn-h0: 'AlphaBlack', serif; --sz-h0: 26pt; --fn-h0-body: 'Frank Ruhl Libre', serif; --sz-h0-body: 11.5pt; --fn-h1: 'Lia Sgula', serif; --sz-h1: 50pt; --fn-h2: 'AlphaBlack', serif; --sz-h2: 17pt; --fn-h3: 'Alpha', serif; --sz-h3: 13.5pt; --fn-h4: 'Alpha', serif; --sz-h4: 12.5pt; --fn-h5: 'AlphaLight', serif; --sz-h5: 11.5pt; --fn-h6: 'Noto Serif Hebrew', serif; --sz-h6: 10.5pt; --fn-h7: 'Hadassah Friedlaender', serif; --sz-h7: 6pt; --fn-sh-title: 'Lia Sgula', serif; --sz-sh-title: 46pt; --fn-sh-sub: 'Livorna', serif; --sz-sh-sub: 21pt; --fn-sh-desc: 'Livorna', serif; --sz-sh-desc: 12pt; --fn-sh-sec: 'David Libre', serif; --sz-sh-sec: 11.5pt; --fn-sh-author: 'David Libre', serif; --sz-sh-author: 15pt; --fn-sh-year: 'David Libre', serif; --sz-sh-year: 12pt; --fn-first-word: 'FrankReal', serif; --sz-first-word: 1.5em; --fn-body: 'Guttman Rashi', serif; --sz-body: 12pt;">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>מערכת עימוד תורנית מקצועית לדפי A4</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <div id="sidebar">
+    <div class="sidebar-top-half">
+      <div class="sidebar-header">
+        <div class="sidebar-title">מערכת עימוד תורנית A4</div>
+        <button class="btn-load-fonts" onclick="loadSystemFonts()">📂 טען גופני Windows</button>
+      </div>
+      <textarea id="raw-input" placeholder="הדבק כאן את הטקסט המלא..."></textarea>
+    </div>
+
+    <div class="sidebar-scrollable-content">
+
+      <!-- פאנל 1: שערים -->
+      <div class="panel-static">
+        <div class="panel-header">👑 בחירת ערכת נושא לשערי הספר</div>
+        
+        <div class="inline-cfg-row" style="margin-bottom: 6px;">
+          <label>ערכת נושא פעילה:</label>
+          <select id="active-theme-select" style="flex:1;" onchange="typesetDocument()">
+            <optgroup label="ערכות מובנות">
+              <option value="builtin_1" selected="selected">1. דמסק ושיש מרכזי</option>
+              <option value="builtin_2">2. תחרת סלסולים כפולה</option>
+              <option value="builtin_3">3. קרנות וילנא וגיליושה</option>
+            </optgroup>
+            <optgroup id="custom-themes-optgroup" label="ערכות שהוטמעו בקובץ">
+            </optgroup>
+          </select>
+        </div>
+
+        <div style="margin-bottom: 6px; display:flex; gap:12px;">
+          <label style="font-size: 8.5pt; font-weight: 700;"><input type="checkbox" id="show-main-shaar" checked="checked" onchange="typesetDocument()"> שער ראשי</label>
+          <label style="font-size: 8.5pt; font-weight: 700;" title="מציג שער אחורי בעמוד 2 (גב השער הראשי)"><input type="checkbox" id="show-back-shaar" onchange="typesetDocument()"> שער אחורי (גב השער)</label>
+        </div>
+
+        <div class="inline-cfg-row">
+          <label>שם הספר:</label>
+          <input type="text" id="inp-book-title" value="שם הספר" placeholder="שם הספר (כותרת ראשית)">
+          <select id="f-sh-title" class="font-picker"><optgroup label="גופני מחשב (411 נמצאו)"><option value="'Lia Sgula', serif" selected="selected">Lia Sgula</option></optgroup></select>
+          <input type="number" id="s-sh-title" class="size-input" value="46">
+        </div>
+        <div class="inline-cfg-row">
+          <label>נושא / משנה:</label>
+          <input type="text" id="inp-book-subtitle" value="נושא הספר מונסח בתמציות" placeholder="נושא / כותרת משנה">
+          <select id="f-sh-sub" class="font-picker"><optgroup label="גופני מחשב (411 נמצאו)"><option value="'Livorna', serif" selected="selected">Livorna</option></optgroup></select>
+          <input type="number" id="s-sh-sub" class="size-input" value="21">
+        </div>
+        <div class="inline-cfg-row">
+          <label>נושא מפורט:</label>
+          <input type="text" id="inp-book-desc" value="נושא הספר בפרטות ובנוסח ארוך יותר" placeholder="נושא מפורט / תיאור החיבור">
+          <select id="f-sh-desc" class="font-picker"><optgroup label="גופני מחשב (411 נמצאו)"><option value="'Livorna', serif" selected="selected">Livorna</option></optgroup></select>
+          <input type="number" id="s-sh-desc" class="size-input" value="12">
+        </div>
+        <div class="inline-cfg-row">
+          <label>פרטי מהדורא:</label>
+          <input type="text" id="inp-book-sections" value="פרטי מהדורה | פרטי מהדורה" placeholder="פרטי מהדורא / חלקים">
+          <select id="f-sh-sec" class="font-picker"><optgroup label="גופני מחשב (411 נמצאו)"><option value="'David Libre', serif" selected="selected">David Libre</option></optgroup></select>
+          <input type="number" id="s-sh-sec" class="size-input" value="11.5" step="0.5">
+        </div>
+        <div class="inline-cfg-row">
+          <label>שם המחבר:</label>
+          <input type="text" id="inp-book-author" value="שם המחבר" placeholder="שם המחבר">
+          <select id="f-sh-author" class="font-picker"><optgroup label="גופני מחשב (411 נמצאו)"><option value="'David Libre', serif" selected="selected">David Libre</option></optgroup></select>
+          <input type="number" id="s-sh-author" class="size-input" value="15">
+        </div>
+        <div class="inline-cfg-row">
+          <label>מקום ושנה:</label>
+          <input type="text" id="inp-book-year" value="מקום ההוצאה | שנת ההוצאה" placeholder="מקום ושנת הוצאה">
+          <select id="f-sh-year" class="font-picker"><optgroup label="גופני מחשב (411 נמצאו)"><option value="'David Libre', serif" selected="selected">David Libre</option></optgroup></select>
+          <input type="number" id="s-sh-year" class="size-input" value="12">
+        </div>
+
+        <div style="border-top: 1px dashed #ccc; margin: 8px 0 6px 0; padding-top: 6px;">
+          <div class="inline-cfg-row">
+            <label>עיטור סיום פרק:</label>
+            <select id="section-divider-style" style="flex:1;" onchange="document.getElementById('row-sec-div-img').style.display = this.value === 'custom_img' ? 'flex' : 'none'; typesetDocument();">
+              <option value="pyramid">1. פירמידת וילנא (❖ ❖ ❖)</option>
+              <option value="spear" selected="selected">2. רומח מחודד עם טבעת (SVG)</option>
+              <option value="swash">3. שושנתא וילנאית (SVG)</option>
+              <option value="flourish">4. סלסול תורני כפול (SVG)</option>
+              <option value="custom_img">5. תמונת עיטור אישית</option>
+              <option value="none">ללא עיטור</option>
+            </select>
+          </div>
+          <div class="inline-cfg-row" id="row-sec-div-img" style="display:none; margin-bottom: 6px;">
+            <label>קובץ עיטור פרק:</label>
+            <input type="file" id="file-sec-div-img" accept=".svg,image/*" style="flex:1; font-size:8pt;" onchange="handleImageUpload(event, 'data-sec-div-img')">
+            <input type="hidden" id="data-sec-div-img" value="">
+          </div>
+        </div>
+      </div>
+
+      <!-- פאנל 2: ערכת נושא חדשה -->
+      <div class="panel-static">
+        <div class="panel-header" style="cursor:pointer;" onclick="togglePanelBody('new-theme-panel-body')">
+          🎨 יצירת והטמעת ערכת נושא חדשה (SVG) <span style="font-size:8pt; font-weight:normal; float:left;">▼ פתח/סגור</span>
+        </div>
+        <div id="new-theme-panel-body">
+          <div class="inline-cfg-row" style="margin-bottom: 6px;">
+            <label style="color:#1e3a8a;">שם הערכה:</label>
+            <input type="text" id="builder-theme-name" placeholder="הזן שם לערכת הנושא החדשה...">
+          </div>
+
+          <div style="background:#f8fafc; border:1px solid #cbd5e1; border-radius:3px; padding:6px; margin-bottom:6px;">
+            <div style="font-weight:700; font-size:8pt; color:#1e3a8a; margin-bottom:4px;">🏛️ 1. שער ראשי (מרכז הדף):</div>
+            <div class="inline-cfg-row">
+              <label>קובץ SVG:</label>
+              <input type="file" id="file-builder-main-svg" accept=".svg,image/*" style="flex:1; font-size:8pt;" onchange="handleImageUpload(event, 'data-builder-main-svg')">
+              <input type="hidden" id="data-builder-main-svg" value="">
+            </div>
+            <div style="display:grid; grid-template-columns: repeat(4, 1fr); gap:4px; margin-top:4px;">
+              <div><label style="font-size:7pt; display:block;">עליון (mm):</label><input type="number" id="builder-main-top" value="20" class="size-input" style="width:100%;"></div>
+              <div><label style="font-size:7pt; display:block;">תחתון (mm):</label><input type="number" id="builder-main-bottom" value="16" class="size-input" style="width:100%;"></div>
+              <div><label style="font-size:7pt; display:block;">ימין (mm):</label><input type="number" id="builder-main-right" value="15" class="size-input" style="width:100%;"></div>
+              <div><label style="font-size:7pt; display:block;">שמאל (mm):</label><input type="number" id="builder-main-left" value="15" class="size-input" style="width:100%;"></div>
+            </div>
+          </div>
+
+          <div style="background:#f8fafc; border:1px solid #cbd5e1; border-radius:3px; padding:6px; margin-bottom:6px;">
+            <div style="font-weight:700; font-size:8pt; color:#1e3a8a; margin-bottom:4px;">📖 2. שער אחורי (טור ימני / גב השער):</div>
+            <div class="inline-cfg-row">
+              <label>קובץ SVG:</label>
+              <input type="file" id="file-builder-back-svg" accept=".svg,image/*" style="flex:1; font-size:8pt;" onchange="handleImageUpload(event, 'data-builder-back-svg')">
+              <input type="hidden" id="data-builder-back-svg" value="">
+            </div>
+            <div style="display:grid; grid-template-columns: repeat(4, 1fr); gap:4px; margin-top:4px;">
+              <div><label style="font-size:7pt; display:block;">עליון (mm):</label><input type="number" id="builder-back-top" value="22" class="size-input" style="width:100%;"></div>
+              <div><label style="font-size:7pt; display:block;">תחתון (mm):</label><input type="number" id="builder-back-bottom" value="18" class="size-input" style="width:100%;"></div>
+              <div><label style="font-size:7pt; display:block;">ימין (mm):</label><input type="number" id="builder-back-right" value="15" class="size-input" style="width:100%;"></div>
+              <div><label style="font-size:7pt; display:block;" title="השוליים משמאל תוחמים את הטור הימני">שמאל (mm):</label><input type="number" id="builder-back-left" value="95" class="size-input" style="width:100%;"></div>
+            </div>
+          </div>
+
+          <div style="background:#f8fafc; border:1px solid #cbd5e1; border-radius:3px; padding:6px; margin-bottom:6px;">
+            <div style="font-weight:700; font-size:8pt; color:#1e3a8a; margin-bottom:4px;">📜 3. שער משנה (טור שמאלי / פותח חלק):</div>
+            <div class="inline-cfg-row">
+              <label>קובץ SVG:</label>
+              <input type="file" id="file-builder-sub-svg" accept=".svg,image/*" style="flex:1; font-size:8pt;" onchange="handleImageUpload(event, 'data-builder-sub-svg')">
+              <input type="hidden" id="data-builder-sub-svg" value="">
+            </div>
+            <div style="display:grid; grid-template-columns: repeat(4, 1fr); gap:4px; margin-top:4px;">
+              <div><label style="font-size:7pt; display:block;">עליון (mm):</label><input type="number" id="builder-sub-top" value="20" class="size-input" style="width:100%;"></div>
+              <div><label style="font-size:7pt; display:block;">תחתון (mm):</label><input type="number" id="builder-sub-bottom" value="20" class="size-input" style="width:100%;"></div>
+              <div><label style="font-size:7pt; display:block;" title="השוליים מימין תוחמים את הטור השמאלי">ימין (mm):</label><input type="number" id="builder-sub-right" value="95" class="size-input" style="width:100%;"></div>
+              <div><label style="font-size:7pt; display:block;">שמאל (mm):</label><input type="number" id="builder-sub-left" value="15" class="size-input" style="width:100%;"></div>
+            </div>
+          </div>
+
+          <button class="btn-load-fonts" style="width:100%; padding:6px; background:#1e3a8a; margin-top:4px;" onclick="addNewCustomTheme()">➕ הטמע ערכת נושא זו בקובץ</button>
+          
+          <div id="custom-themes-list" style="margin-top:8px;"></div>
+        </div>
+      </div>
+
+      <!-- פאנל ייבוא תוספים -->
+      <div class="panel-static">
+        <div class="panel-header">🧩 ייבוא תוספים (סוגי עמוד / סגנונות טקסט)</div>
+        <div class="inline-cfg-row">
+          <label>סוג עמוד:</label>
+          <input type="file" accept=".json" style="flex:1;font-size:8pt;" onchange="handlePageTypeImportFile(event)">
+        </div>
+        <div class="inline-cfg-row">
+          <label>סגנון טקסט:</label>
+          <input type="file" accept=".json" style="flex:1;font-size:8pt;" onchange="handleTextStyleImportFile(event)">
+        </div>
+        <div class="inline-cfg-row">
+          <label>תמונה כעמוד:</label>
+          <input type="file" accept="image/*" style="flex:1;font-size:8pt;" onchange="handleImagePageImportFile(event)">
+        </div>
+      </div>
+      <div id="ext-imports-container"></div>
+
+      <!-- פאנל הגדרות הערות מורחב ומדויק -->
+      <div class="panel-static">
+        <div class="panel-header">📝 הגדרות הערות (שוליים / סיום)</div>
+
+        <div style="font-weight:700; font-size:8pt; margin: 2px 0 3px 0; color:#1e3a8a;">📌 הערות שוליים (בתחתית העמוד):</div>
+        <div class="inline-cfg-row">
+          <label>תוחמי טקסט (פ/ס):</label>
+          <div style="display:flex; gap:4px; flex:1; align-items:center;">
+            <input type="text" id="fn-delim-open" value="[" style="width:45px; text-align:center; font-size:8pt; padding:2px; border:1px solid #aaa; border-radius:2px;" placeholder="פתיחה" oninput="typesetDocument()">
+            <span style="font-size:8pt; color:#666;">עד</span>
+            <input type="text" id="fn-delim-close" value="]" style="width:45px; text-align:center; font-size:8pt; padding:2px; border:1px solid #aaa; border-radius:2px;" placeholder="סגירה" oninput="typesetDocument()">
+          </div>
+        </div>
+
+        <div style="font-weight:700; font-size:8pt; margin: 6px 0 3px 0; color:#1e3a8a; border-top:1px dashed #ddd; padding-top:4px;">📚 הערות סיום (מרוכזות בסוף חלק):</div>
+        <div class="inline-cfg-row">
+          <label>קידומת שורה:</label>
+          <input type="text" id="en-line-prefix" value="הערת סיום -" placeholder="למשל: הערת סיום -" oninput="typesetDocument()">
+        </div>
+
+        <div style="border-top:1px dashed #ddd; margin-top:6px; padding-top:4px;"></div>
+        <div class="inline-cfg-row"><label>סגנון מספור:</label>
+          <select id="note-numbering-style" onchange="typesetDocument()">
+            <option value="gematria" selected="selected">אותיות עבריות (א, ב, ג...)</option>
+            <option value="decimal">ספרות (1, 2, 3...)</option>
+          </select>
+        </div>
+        <div class="inline-cfg-row"><label>סוג סימון בטקסט:</label>
+          <select id="note-marker-type" onchange="typesetDocument()">
+            <option value="super" selected="selected">כתב עילי</option>
+            <option value="normal">רגיל (על השורה)</option>
+            <option value="sub">כתב תחתי</option>
+            <option value="brackets">בסוגריים מרובעים [1]</option>
+          </select>
+        </div>
+        <div class="inline-cfg-row"><label>גודל סימון בטקסט:</label><input type="number" id="note-marker-size" value="8" class="size-input" oninput="typesetDocument()"></div>
+        <div class="inline-cfg-row"><label>גודל מס' ברשימה:</label><input type="number" id="note-listing-num-size" value="8" class="size-input" oninput="typesetDocument()"></div>
+        <div class="inline-cfg-row"><label>מפריד אחרי מספר:</label><input type="text" id="note-num-separator" value="." style="flex:0 0 40px;" oninput="typesetDocument()"></div>
+        <div class="inline-cfg-row"><label>קו מפריד (שוליים):</label>
+          <select id="note-rule-style" onchange="typesetDocument()">
+            <option value="plain" selected="selected">קו רגיל</option>
+            <option value="dots">קו + עיגולים ◦◦◦</option>
+            <option value="sparkle">קו + ניצוץ ❖❖❖</option>
+            <option value="star">קו + כוכבית ✧✧✧</option>
+            <option value="diamond">קו + יהלום ♦♦♦</option>
+            <option value="none">ללא קו</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- פאנל איכות עימוד -->
+      <div class="panel-static">
+        <div class="panel-header">✍️ איכות עימוד אוטומטי</div>
+        <div class="inline-cfg-row"><label>מניעת שורות בודדות:</label>
+          <select id="avoid-widows-select" onchange="typesetDocument()">
+            <option value="yes" selected="selected">כן</option>
+            <option value="no">לא</option>
+          </select>
+        </div>
+        <div class="inline-cfg-row"><label>איזון סוף-פרק:</label>
+          <select id="balance-chapter-end" onchange="typesetDocument()">
+            <option value="yes" selected="selected">כן</option>
+            <option value="no">לא</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- פאנל רקעים -->
+      <div class="panel-static">
+        <div class="panel-header">🎨 רקע לעמודי תוכן</div>
+        <div class="inline-cfg-row" style="margin-bottom: 4px;">
+          <label>עמוד טקסט רגיל:</label>
+          <select id="cbg-regular-mode" style="flex:1;" onchange="toggleCbgSubRows('regular', this.value)">
+            <option value="none" selected="selected">ללא (ברירת מחדל)</option>
+            <option value="color">צבע רקע אחיד</option>
+            <option value="texture">מרקם עדין (דמשק דהוי)</option>
+            <option value="image">תמונה מותאמת אישית</option>
+          </select>
+        </div>
+        <div class="inline-cfg-row" id="row-cbg-regular-color" style="display:none; margin-bottom: 6px;">
+          <label>צבע:</label><input type="color" id="cbg-regular-color" value="#f4f1e8">
+        </div>
+        <div class="inline-cfg-row" id="row-cbg-regular-img" style="display:none; margin-bottom: 6px;">
+          <label>קובץ:</label>
+          <input type="file" id="file-cbg-regular-img" accept="image/*" style="flex:1; font-size:8pt;" onchange="handleImageUpload(event, 'data-cbg-regular-img')">
+          <input type="hidden" id="data-cbg-regular-img" value="">
+        </div>
+        <div class="inline-cfg-row" id="row-cbg-regular-op" style="display:none; margin-bottom: 8px;">
+          <label>שקיפות תמונה:</label><input type="range" id="cbg-regular-opacity" min="0" max="100" value="15" style="flex:1;">
+        </div>
+
+        <div class="inline-cfg-row" style="margin-bottom: 4px;">
+          <label>עמוד "כותרת 0":</label>
+          <select id="cbg-h0Open-mode" style="flex:1;" onchange="toggleCbgSubRows('h0Open', this.value)">
+            <option value="none" selected="selected">ללא (ברירת מחדל)</option>
+            <option value="color">צבע רקע אחיד</option>
+            <option value="texture">מרקם עדין (דמשק דהוי)</option>
+            <option value="image">תמונה מותאמת אישית</option>
+          </select>
+        </div>
+        <div class="inline-cfg-row" id="row-cbg-h0Open-color" style="display:none; margin-bottom: 6px;">
+          <label>צבע:</label><input type="color" id="cbg-h0Open-color" value="#f4f1e8">
+        </div>
+        <div class="inline-cfg-row" id="row-cbg-h0Open-img" style="display:none; margin-bottom: 6px;">
+          <label>קובץ:</label>
+          <input type="file" id="file-cbg-h0Open-img" accept="image/*" style="flex:1; font-size:8pt;" onchange="handleImageUpload(event, 'data-cbg-h0Open-img')">
+          <input type="hidden" id="data-cbg-h0Open-img" value="">
+        </div>
+        <div class="inline-cfg-row" id="row-cbg-h0Open-op" style="display:none; margin-bottom: 8px;">
+          <label>שקיפות תמונה:</label><input type="range" id="cbg-h0Open-opacity" min="0" max="100" value="15" style="flex:1;">
+        </div>
+
+        <div class="inline-cfg-row" style="margin-bottom: 4px;">
+          <label>עמוד "כותרת 2":</label>
+          <select id="cbg-h2Open-mode" style="flex:1;" onchange="toggleCbgSubRows('h2Open', this.value)">
+            <option value="none" selected="selected">ללא (ברירת מחדל)</option>
+            <option value="color">צבע רקע אחיד</option>
+            <option value="texture">מרקם עדין (דמשק דהוי)</option>
+            <option value="image">תמונה מותאמת אישית</option>
+          </select>
+        </div>
+        <div class="inline-cfg-row" id="row-cbg-h2Open-color" style="display:none; margin-bottom: 6px;">
+          <label>צבע:</label><input type="color" id="cbg-h2Open-color" value="#f4f1e8">
+        </div>
+        <div class="inline-cfg-row" id="row-cbg-h2Open-img" style="display:none; margin-bottom: 6px;">
+          <label>קובץ:</label>
+          <input type="file" id="file-cbg-h2Open-img" accept="image/*" style="flex:1; font-size:8pt;" onchange="handleImageUpload(event, 'data-cbg-h2Open-img')">
+          <input type="hidden" id="data-cbg-h2Open-img" value="">
+        </div>
+        <div class="inline-cfg-row" id="row-cbg-h2Open-op" style="display:none; margin-bottom: 8px;">
+          <label>שקיפות תמונה:</label><input type="range" id="cbg-h2Open-opacity" min="0" max="100" value="15" style="flex:1;">
+        </div>
+
+        <div style="border-top: 1px dashed #ccc; margin: 8px 0 6px 0; padding-top: 6px;">
+          <div style="font-size:8pt; font-weight:700; margin-bottom:6px;">תוכן העניינים</div>
+          <div class="inline-cfg-row" style="margin-bottom: 4px;">
+            <label>עמוד ראשון:</label>
+            <select id="cbg-tocFirst-mode" style="flex:1;" onchange="toggleCbgSubRows('tocFirst', this.value)">
+              <option value="none" selected="selected">ללא (ברירת מחדל)</option>
+              <option value="color">צבע רקע אחיד</option>
+              <option value="texture">מרקם עדין (דמשק דהוי)</option>
+              <option value="image">תמונה מותאמת אישית</option>
+            </select>
+          </div>
+          <div class="inline-cfg-row" id="row-cbg-tocFirst-color" style="display:none; margin-bottom: 6px;">
+            <label>צבע:</label><input type="color" id="cbg-tocFirst-color" value="#f4f1e8">
+          </div>
+          <div class="inline-cfg-row" id="row-cbg-tocFirst-img" style="display:none; margin-bottom: 6px;">
+            <label>קובץ:</label>
+            <input type="file" id="file-cbg-tocFirst-img" accept="image/*" style="flex:1; font-size:8pt;" onchange="handleImageUpload(event, 'data-cbg-tocFirst-img')">
+            <input type="hidden" id="data-cbg-tocFirst-img" value="">
+          </div>
+          <div class="inline-cfg-row" id="row-cbg-tocFirst-op" style="display:none; margin-bottom: 8px;">
+            <label>שקיפות תמונה:</label><input type="range" id="cbg-tocFirst-opacity" min="0" max="100" value="15" style="flex:1;">
+          </div>
+
+          <div class="inline-cfg-row" style="margin-bottom: 4px;">
+            <label>עמוד רגיל (ביניים):</label>
+            <select id="cbg-tocRegular-mode" style="flex:1;" onchange="toggleCbgSubRows('tocRegular', this.value)">
+              <option value="none" selected="selected">ללא (ברירת מחדל)</option>
+              <option value="color">צבע רקע אחיד</option>
+              <option value="texture">מרקם עדין (דמשק דהוי)</option>
+              <option value="image">תמונה מותאמת אישית</option>
+            </select>
+          </div>
+          <div class="inline-cfg-row" id="row-cbg-tocRegular-color" style="display:none; margin-bottom: 6px;">
+            <label>צבע:</label><input type="color" id="cbg-tocRegular-color" value="#f4f1e8">
+          </div>
+          <div class="inline-cfg-row" id="row-cbg-tocRegular-img" style="display:none; margin-bottom: 6px;">
+            <label>קובץ:</label>
+            <input type="file" id="file-cbg-tocRegular-img" accept="image/*" style="flex:1; font-size:8pt;" onchange="handleImageUpload(event, 'data-cbg-tocRegular-img')">
+            <input type="hidden" id="data-cbg-tocRegular-img" value="">
+          </div>
+          <div class="inline-cfg-row" id="row-cbg-tocRegular-op" style="display:none; margin-bottom: 8px;">
+            <label>שקיפות תמונה:</label><input type="range" id="cbg-tocRegular-opacity" min="0" max="100" value="15" style="flex:1;">
+          </div>
+
+          <div class="inline-cfg-row" style="margin-bottom: 4px;">
+            <label>עמוד אחרון:</label>
+            <select id="cbg-tocLast-mode" style="flex:1;" onchange="toggleCbgSubRows('tocLast', this.value)">
+              <option value="none" selected="selected">ללא (ברירת מחדל)</option>
+              <option value="color">צבע רקע אחיד</option>
+              <option value="texture">מרקם עדין (דמשק דהוי)</option>
+              <option value="image">תמונה מותאמת אישית</option>
+            </select>
+          </div>
+          <div class="inline-cfg-row" id="row-cbg-tocLast-color" style="display:none; margin-bottom: 6px;">
+            <label>צבע:</label><input type="color" id="cbg-tocLast-color" value="#f4f1e8">
+          </div>
+          <div class="inline-cfg-row" id="row-cbg-tocLast-img" style="display:none; margin-bottom: 6px;">
+            <label>קובץ:</label>
+            <input type="file" id="file-cbg-tocLast-img" accept="image/*" style="flex:1; font-size:8pt;" onchange="handleImageUpload(event, 'data-cbg-tocLast-img')">
+            <input type="hidden" id="data-cbg-tocLast-img" value="">
+          </div>
+          <div class="inline-cfg-row" id="row-cbg-tocLast-op" style="display:none; margin-bottom: 8px;">
+            <label>שקיפות תמונה:</label><input type="range" id="cbg-tocLast-opacity" min="0" max="100" value="15" style="flex:1;">
+          </div>
+        </div>
+      </div>
+
+      <!-- פאנל כותרות 0-7 -->
+      <div class="panel-static">
+        <div class="panel-header">📐 אופן עימוד וגופנים לכל כותרת (0-7)</div>
+        <div class="inline-cfg-row">
+          <label>כותרת 0 (הקדמה):</label>
+          <select id="mode-h0"><option value="new_page_1col" selected="selected">טור 1 עמוד הבא</option><option value="span_1col">טור 1 רציף</option></select>
+          <select id="f-h0" class="font-picker"><optgroup label="גופני מחשב (411 נמצאו)"><option value="'AlphaBlack', serif" selected="selected">AlphaBlack</option></optgroup></select>
+          <input type="number" id="s-h0" class="size-input" value="26">
+          <label style="font-size:6.8pt; display:flex; align-items:center; gap:2px; flex:0 0 auto;"><input type="checkbox" id="odd-h0" style="margin:0;">אי-זוגי</label>
+        </div>
+        <div class="inline-cfg-row">
+          <label>טקסט כותרת 0:</label>
+          <span style="font-size:7.5pt; color:#666; width:95px; flex-shrink:0;">(גוף ההקדמה)</span>
+          <select id="f-h0-body" class="font-picker"><optgroup label="גופני מחשב (411 נמצאו)"><option value="'Frank Ruhl Libre', serif" selected="selected">Frank Ruhl Libre</option></optgroup></select>
+          <input type="number" id="s-h0-body" class="size-input" value="11.5" step="0.2">
+        </div>
+        <div class="inline-cfg-row">
+          <label>כותרת 1 (שער משנה):</label>
+          <select id="mode-h1"><option value="sub_shaar" selected="selected">שער משנה נפרד</option><option value="new_page_1col">טור 1 עמוד הבא</option></select>
+          <select id="f-h1" class="font-picker"><optgroup label="גופני מחשב (411 נמצאו)"><option value="'Lia Sgula', serif" selected="selected">Lia Sgula</option></optgroup></select>
+          <input type="number" id="s-h1" class="size-input" value="50">
+          <label style="font-size:6.8pt; display:flex; align-items:center; gap:2px; flex:0 0 auto;"><input type="checkbox" id="odd-h1" style="margin:0;">אי-זוגי</label>
+        </div>
+        <div class="inline-cfg-row">
+          <label>כותרת 2 (פרק):</label>
+          <select id="mode-h2"><option value="new_page_1col" selected="selected">טור 1 עמוד הבא</option></select>
+          <select id="f-h2" class="font-picker"><optgroup label="גופני מחשב (411 נמצאו)"><option value="'AlphaBlack', serif" selected="selected">AlphaBlack</option></optgroup></select>
+          <input type="number" id="s-h2" class="size-input" value="17">
+          <label style="font-size:6.8pt; display:flex; align-items:center; gap:2px; flex:0 0 auto;"><input type="checkbox" id="odd-h2" style="margin:0;">אי-זוגי</label>
+        </div>
+        <div class="inline-cfg-row">
+          <label>כותרת 3:</label>
+          <select id="mode-h3"><option value="span_1col" selected="selected">טור 1 רציף (רוחב דף)</option><option value="inline_2col">רציף 2 טורים</option></select>
+          <select id="f-h3" class="font-picker"><optgroup label="גופני מחשב (411 נמצאו)"><option value="'Alpha', serif" selected="selected">Alpha</option></optgroup></select>
+          <input type="number" id="s-h3" class="size-input" value="13.5" step="0.5">
+        </div>
+        <div class="inline-cfg-row">
+          <label>כותרת 4:</label>
+          <select id="mode-h4"><option value="inline_2col" selected="selected">רציף 2 טורים</option><option value="span_1col">טור 1 רציף</option></select>
+          <select id="f-h4" class="font-picker"><optgroup label="גופני מחשב (411 נמצאו)"><option value="'Alpha', serif" selected="selected">Alpha</option></optgroup></select>
+          <input type="number" id="s-h4" class="size-input" value="12.5" step="0.5">
+        </div>
+        <div class="inline-cfg-row">
+          <label>כותרת 5:</label>
+          <select id="mode-h5"><option value="inline_2col" selected="selected">רציף 2 טורים</option><option value="side_note">כותרת צד</option></select>
+          <select id="f-h5" class="font-picker"><optgroup label="גופני מחשב (411 נמצאו)"><option value="'AlphaLight', serif" selected="selected">AlphaLight</option></optgroup></select>
+          <input type="number" id="s-h5" class="size-input" value="11.5" step="0.5">
+        </div>
+        <div class="inline-cfg-row">
+          <label>כותרת 6:</label>
+          <select id="mode-h6"><option value="inline_2col" selected="selected">רציף 2 טורים</option><option value="side_note">כותרת צד</option></select>
+          <select id="f-h6" class="font-picker"><optgroup label="גופני מחשב (411 נמצאו)"><option value="'Noto Serif Hebrew', serif" selected="selected">Noto Serif Hebrew</option></optgroup></select>
+          <input type="number" id="s-h6" class="size-input" value="10.5" step="0.5">
+        </div>
+        <div class="inline-cfg-row">
+          <label>כותרת 7 (צד):</label>
+          <select id="mode-h7"><option value="side_note" selected="selected">כותרת צד בשוליים</option><option value="inline_2col">רציף 2 טורים</option></select>
+          <select id="f-h7" class="font-picker"><optgroup label="גופני מחשב (411 נמצאו)"><option value="'Hadassah Friedlaender', serif" selected="selected">Hadassah Friedlaender</option></optgroup></select>
+          <input type="number" id="s-h7" class="size-input" value="6" step="0.2">
+        </div>
+      </div>
+
+      <!-- פאנל כותרות עליונות -->
+      <div class="panel-static">
+        <div class="panel-header">📑 כותרות עליונות (3 אזורים)</div>
+        <div style="font-weight:700; font-size:8pt; margin-bottom:2px;">1. מעל הטור הימני:</div>
+        <div class="inline-cfg-row" style="margin-bottom: 2px;">
+          <select id="hdr-r-type" style="flex:1;" onchange="document.getElementById('hdr-r-custom').style.display = this.value === 'custom' ? 'block' : 'none'">
+            <option value="h1" selected="selected">כותרת 1 (שם החלק)</option>
+            <option value="book_title">שם הספר</option>
+            <option value="h2">כותרת 2</option>
+            <option value="h3">כותרת 3</option>
+            <option value="custom">מותאם אישית</option>
+            <option value="diamonds">מעויינים (◈ ❖ ◈)</option>
+            <option value="spear">רומח (SVG)</option>
+            <option value="swash">שושנתא (SVG)</option>
+            <option value="pen">סלסול (SVG)</option>
+            <option value="empty">ריק</option>
+          </select>
+          <select id="hdr-r-align" style="width:65px;"><option value="center" selected="selected">מרכז</option><option value="right">ימין</option><option value="left">שמאל</option></select>
+          <select id="f-hdr-r" class="font-picker"><optgroup label="גופני מחשב (411 נמצאו)"><option value="'Livorna', serif" selected="selected">Livorna</option></optgroup></select>
+          <input type="number" id="s-hdr-r" class="size-input" value="15">
+        </div>
+        <input type="text" id="hdr-r-custom" placeholder="הזן טקסט מותאם אישית..." style="display:none; width:100%; margin-bottom:8px; font-size:8.5pt; padding:3px; border:1px solid #aaa; border-radius:2px;">
+
+        <div style="font-weight:700; font-size:8pt; margin-bottom:2px;">2. מעל הרווח המרכזי (Gutter):</div>
+        <div class="inline-cfg-row" style="margin-bottom: 2px;">
+          <select id="hdr-c-type" style="flex:1;" onchange="
+            document.getElementById('hdr-c-custom').style.display = this.value === 'custom' ? 'block' : 'none';
+            document.getElementById('row-hdr-c-img').style.display = this.value === 'custom_img' ? 'flex' : 'none';
+          ">
+            <option value="h1">כותרת 1 (שם החלק)</option>
+            <option value="book_title">שם הספר</option>
+            <option value="h2">כותרת 2</option>
+            <option value="h3">כותרת 3</option>
+            <option value="custom">מותאם אישית</option>
+            <option value="diamonds">מעויינים (◈ ❖ ◈)</option>
+            <option value="spear" selected="selected">רומח (SVG)</option>
+            <option value="swash">שושנתא (SVG)</option>
+            <option value="pen">סלסול (SVG)</option>
+            <option value="custom_img">תמונת עיטור (קובץ)</option>
+            <option value="empty">ריק</option>
+          </select>
+          <select id="hdr-c-align" style="width:65px;"><option value="center" selected="selected">מרכז</option></select>
+          <select id="f-hdr-c" class="font-picker"><optgroup label="גופני מחשב (411 נמצאו)"><option value="'Livorna', serif" selected="selected">Livorna</option></optgroup></select>
+          <input type="number" id="s-hdr-c" class="size-input" value="11">
+        </div>
+        <input type="text" id="hdr-c-custom" placeholder="הזן טקסט מותאם אישית..." style="display:none; width:100%; margin-bottom:8px; font-size:8.5pt; padding:3px; border:1px solid #aaa; border-radius:2px;">
+        <div class="inline-cfg-row" id="row-hdr-c-img" style="display:none; margin-bottom:8px;">
+          <label>קובץ עיטור מרכזי:</label>
+          <input type="file" id="file-hdr-c-img" accept=".svg,image/*" style="flex:1; font-size:8pt;" onchange="handleImageUpload(event, 'data-hdr-c-img')">
+          <input type="hidden" id="data-hdr-c-img" value="">
+        </div>
+
+        <div style="font-weight:700; font-size:8pt; margin-bottom:2px;">3. מעל הטור השמאלי:</div>
+        <div class="inline-cfg-row" style="margin-bottom: 2px;">
+          <select id="hdr-l-type" style="flex:1;" onchange="document.getElementById('hdr-l-custom').style.display = this.value === 'custom' ? 'block' : 'none'">
+            <option value="h1">כותרת 1 (שם החלק)</option>
+            <option value="book_title">שם הספר</option>
+            <option value="h2" selected="selected">כותרת 2</option>
+            <option value="h3">כותרת 3</option>
+            <option value="custom">מותאם אישית</option>
+            <option value="diamonds">מעויינים (◈ ❖ ◈)</option>
+            <option value="spear">רומח (SVG)</option>
+            <option value="swash">שושנתא (SVG)</option>
+            <option value="pen">סלסול (SVG)</option>
+            <option value="empty">ריק</option>
+          </select>
+          <select id="hdr-l-align" style="width:65px;"><option value="center" selected="selected">מרכז</option><option value="right">ימין</option></select>
+          <select id="f-hdr-l" class="font-picker"><optgroup label="גופני מחשב (411 נמצאו)"><option value="'Livorna', serif" selected="selected">Livorna</option></optgroup></select>
+          <input type="number" id="s-hdr-l" class="size-input" value="15">
+        </div>
+        <input type="text" id="hdr-l-custom" placeholder="הזן טקסט מותאם אישית..." style="display:none; width:100%; margin-bottom:4px; font-size:8.5pt; padding:3px; border:1px solid #aaa; border-radius:2px;">
+      </div>
+
+      <!-- פאנל תוכן העניינים -->
+      <div class="panel-static">
+        <div class="panel-header">📑 תוכן העניינים (כללי ומפורט)</div>
+        <div style="margin-bottom:4px;">
+          <label style="font-size:8.5pt; font-weight:700;"><input type="checkbox" id="enable-general-toc" checked="checked"> הצג תוכן עניינים כללי בראש הספר</label>
+        </div>
+        <table class="toc-levels-table">
+          <thead><tr><th>רמה</th><th>הצג</th><th>קיבוץ</th><th>גופן</th><th>גודל</th></tr></thead>
+          <tbody>
+            <tr><td>כותרת 1</td><td><input type="checkbox" class="gtoc-show" value="1" checked="checked"></td><td><input type="checkbox" class="gtoc-grp" value="1"></td><td><select id="f-gtoc-1" class="font-picker"><optgroup label="גופני מחשב (411 נמצאו)"><option value="'David Libre', serif" selected="selected">David Libre</option></optgroup></select></td><td><input type="number" id="s-gtoc-1" class="size-input" value="12"></td></tr>
+            <tr><td>כותרת 2</td><td><input type="checkbox" class="gtoc-show" value="2" checked="checked"></td><td><input type="checkbox" class="gtoc-grp" value="2"></td><td><select id="f-gtoc-2" class="font-picker"><optgroup label="גופני מחשב (411 נמצאו)"><option value="'David Libre', serif" selected="selected">David Libre</option></optgroup></select></td><td><input type="number" id="s-gtoc-2" class="size-input" value="11"></td></tr>
+            <tr><td>כותרת 3</td><td><input type="checkbox" class="gtoc-show" value="3" checked="checked"></td><td><input type="checkbox" class="gtoc-grp" value="3" checked="checked"></td><td><select id="f-gtoc-3" class="font-picker"><optgroup label="גופני מחשב (411 נמצאו)"><option value="'David Libre', serif" selected="selected">David Libre</option></optgroup></select></td><td><input type="number" id="s-gtoc-3" class="size-input" value="10.5"></td></tr>
+            <tr><td>כותרת 4</td><td><input type="checkbox" class="gtoc-show" value="4" checked="checked"></td><td><input type="checkbox" class="gtoc-grp" value="4"></td><td><select id="f-gtoc-4" class="font-picker"><optgroup label="גופני מחשב (411 נמצאו)"><option value="'David Libre', serif" selected="selected">David Libre</option></optgroup></select></td><td><input type="number" id="s-gtoc-4" class="size-input" value="10.5"></td></tr>
+            <tr><td>כותרת 5</td><td><input type="checkbox" class="gtoc-show" value="5" checked="checked"></td><td><input type="checkbox" class="gtoc-grp" value="5"></td><td><select id="f-gtoc-5" class="font-picker"><optgroup label="גופני מחשב (411 נמצאו)"><option value="'David Libre', serif" selected="selected">David Libre</option></optgroup></select></td><td><input type="number" id="s-gtoc-5" class="size-input" value="10.5"></td></tr>
+            <tr><td>כותרת 6</td><td><input type="checkbox" class="gtoc-show" value="6" checked="checked"></td><td><input type="checkbox" class="gtoc-grp" value="6"></td><td><select id="f-gtoc-6" class="font-picker"><optgroup label="גופני מחשב (411 נמצאו)"><option value="'David Libre', serif" selected="selected">David Libre</option></optgroup></select></td><td><input type="number" id="s-gtoc-6" class="size-input" value="10.5"></td></tr>
+            <tr><td>כותרת 7</td><td><input type="checkbox" class="gtoc-show" value="7"></td><td><input type="checkbox" class="gtoc-grp" value="7"></td><td><select id="f-gtoc-7" class="font-picker"><optgroup label="גופני מחשב (411 נמצאו)"><option value="'David Libre', serif" selected="selected">David Libre</option></optgroup></select></td><td><input type="number" id="s-gtoc-7" class="size-input" value="8.8"></td></tr>
+          </tbody>
+        </table>
+
+        <div style="margin: 8px 0 4px 0; border-top:1px dashed #ccc; padding-top:4px;">
+          <label style="font-size:8.5pt; font-weight:700;"><input type="checkbox" id="enable-detailed-toc" checked="checked"> הצג תוכן מפורט בראש שערי משנה</label>
+        </div>
+        <table class="toc-levels-table">
+          <thead><tr><th>רמה</th><th>הצג</th><th>קיבוץ</th><th>גופן</th><th>גודל</th></tr></thead>
+          <tbody>
+            <tr><td>כותרת 1</td><td><input type="checkbox" class="dtoc-show" value="1"></td><td><input type="checkbox" class="dtoc-grp" value="1"></td><td><select id="f-dtoc-1" class="font-picker"><optgroup label="גופני מחשב (411 נמצאו)"><option value="'David Libre', serif" selected="selected">David Libre</option></optgroup></select></td><td><input type="number" id="s-dtoc-1" class="size-input" value="12"></td></tr>
+            <tr><td>כותרת 2</td><td><input type="checkbox" class="dtoc-show" value="2" checked="checked"></td><td><input type="checkbox" class="dtoc-grp" value="2"></td><td><select id="f-dtoc-2" class="font-picker"><optgroup label="גופני מחשב (411 נמצאו)"><option value="'David Libre', serif" selected="selected">David Libre</option></optgroup></select></td><td><input type="number" id="s-dtoc-2" class="size-input" value="11"></td></tr>
+            <tr><td>כותרת 3</td><td><input type="checkbox" class="dtoc-show" value="3" checked="checked"></td><td><input type="checkbox" class="dtoc-grp" value="3"></td><td><select id="f-dtoc-3" class="font-picker"><optgroup label="גופני מחשב (411 נמצאו)"><option value="'David Libre', serif" selected="selected">David Libre</option></optgroup></select></td><td><input type="number" id="s-dtoc-3" class="size-input" value="10.5"></td></tr>
+            <tr><td>כותרת 4</td><td><input type="checkbox" class="dtoc-show" value="4" checked="checked"></td><td><input type="checkbox" class="dtoc-grp" value="4"></td><td><select id="f-dtoc-4" class="font-picker"><optgroup label="גופני מחשב (411 נמצאו)"><option value="'David Libre', serif" selected="selected">David Libre</option></optgroup></select></td><td><input type="number" id="s-dtoc-4" class="size-input" value="10.5"></td></tr>
+            <tr><td>כותרת 5</td><td><input type="checkbox" class="dtoc-show" value="5" checked="checked"></td><td><input type="checkbox" class="dtoc-grp" value="5"></td><td><select id="f-dtoc-5" class="font-picker"><optgroup label="גופני מחשב (411 נמצאו)"><option value="'David Libre', serif" selected="selected">David Libre</option></optgroup></select></td><td><input type="number" id="s-dtoc-5" class="size-input" value="10.5"></td></tr>
+            <tr><td>כותרת 6</td><td><input type="checkbox" class="dtoc-show" value="6" checked="checked"></td><td><input type="checkbox" class="dtoc-grp" value="6"></td><td><select id="f-dtoc-6" class="font-picker"><optgroup label="גופני מחשב (411 נמצאו)"><option value="'David Libre', serif" selected="selected">David Libre</option></optgroup></select></td><td><input type="number" id="s-dtoc-6" class="size-input" value="10.5"></td></tr>
+            <tr><td>כותרת 7</td><td><input type="checkbox" class="dtoc-show" value="7" checked="checked"></td><td><input type="checkbox" class="dtoc-grp" value="7"></td><td><select id="f-dtoc-7" class="font-picker"><optgroup label="גופני מחשב (411 נמצאו)"><option value="'David Libre', serif" selected="selected">David Libre</option></optgroup></select></td><td><input type="number" id="s-dtoc-7" class="size-input" value="8.8"></td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- פאנל גריד וטיפוגרפיה -->
+      <div class="panel-static">
+        <div class="panel-header">📐 גריד וטיפוגרפיה כללית</div>
+        <div class="inline-cfg-row">
+          <label>גוף הטקסט:</label>
+          <select id="font-body" class="font-picker"><optgroup label="גופני מחשב (411 נמצאו)"><option value="'Guttman Rashi', serif" selected="selected">Guttman Rashi</option></optgroup></select>
+          <input type="number" id="size-body" class="size-input" value="12" step="0.2">
+        </div>
+        <div class="inline-cfg-row">
+          <label>מילה ראשונה:</label>
+          <select id="font-first-word" class="font-picker"><optgroup label="גופני מחשב (411 נמצאו)"><option value="'FrankReal', serif" selected="selected">FrankReal</option></optgroup></select>
+          <input type="number" id="size-first-word" class="size-input" value="1.5" step="0.1">
+        </div>
+        <div class="proportions-grid" style="margin-top:6px; display: grid; grid-template-columns: 1fr 1fr; gap: 4px;">
+          <div class="prop-item"><label>טור (%):</label><input type="number" id="prop-col" value="40" step="0.5" class="size-input"></div>
+          <div class="prop-item"><label>שוליים (%):</label><input type="number" id="prop-margin" value="7" step="0.5" class="size-input"></div>
+          <div class="prop-item"><label>רווח מרכזי (%):</label><input type="number" id="prop-gutter" value="2" step="0.5" class="size-input"></div>
+          <div class="prop-item"><label>רווח ביניים (%):</label><input type="number" id="prop-gap" value="2" step="0.5" class="size-input"></div>
+          <div class="prop-item"><label>מרחק עליון (px):</label><input type="number" id="prop-mt" value="20" step="1" class="size-input"></div>
+          <div class="prop-item"><label>מרחק תחתון (px):</label><input type="number" id="prop-mb" value="20" step="1" class="size-input"></div>
+        </div>
+      </div>
+
+    </div>
+
+    <div class="btn-bar-bottom">
+      <button class="btn-save-template" onclick="saveAsDefaultTemplate()">💾 שמור תבנית</button>
+      <button class="btn-primary" onclick="typesetDocument()">⚡ עדכן ועמד מחדש</button>
+      <button class="btn-secondary" onclick="window.print()">🖨️ הדפסה / PDF</button>
+    </div>
+  </div>
+
+  <div id="resizer"></div>
+
+  <div id="preview-pane">
+    <div id="book-container"></div>
+  </div>
+
+  <div id="measuring-box"></div>
+
+  <!-- טעינת סקריפטים בסדר תלויות מדויק -->
+  <script src="decorations.js"></script>
+  <script src="typesetter.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
