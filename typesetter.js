@@ -7,6 +7,19 @@ let noteUidCounter = 0;
 let footnoteQueueForPage = [];
 let endnoteQueueForPart = [];
 let lineToTokenMap = [];
+let globalTokens = [];
+
+/* ==========================================================================
+   סינון הערות עריכה (##...##) מהמסמך המעומד
+   ========================================================================== */
+function stripEditorialNotes(text) {
+  if (!text || typeof text !== 'string') return text || '';
+  return text
+    .replace(/##[\s\S]*?##/g, '')
+    .replace(/[ \t]{2,}/g, ' ')
+    .replace(/\s+([,.:;!?])/g, '$1')
+    .trim();
+}
 
 function toGematria(num) {
   num = parseInt(num, 10);
@@ -95,6 +108,12 @@ function updateStyles() {
   root.style.setProperty('--sz-first-word', document.getElementById('size-first-word').value + 'em');
   root.style.setProperty('--fn-body', document.getElementById('font-body').value);
   root.style.setProperty('--sz-body', document.getElementById('size-body').value + 'pt');
+
+  // גופן וגודל שורת סימן לכותרת 2
+  const fSiman = document.getElementById('f-siman')?.value;
+  const sSiman = document.getElementById('s-siman')?.value;
+  if (fSiman) root.style.setProperty('--fn-siman', fSiman);
+  if (sSiman) root.style.setProperty('--sz-siman', sSiman + 'pt');
 }
 
 function createDropWord(text, isContinuation, isSingleLine) {
@@ -112,6 +131,7 @@ function createDropWord(text, isContinuation, isSingleLine) {
 function createPageLayout(container, h2Text, h2TokenId, pNum, h1Title, h2Title, h3Title, bookTitle, customR, customC, customL, pageRole) {
   const page = document.createElement('div');
   page.className = 'a4-page';
+  page.setAttribute('data-page-index', String(pNum));
   applyContentBg(page, pageRole || 'regular');
 
   const hdrRType = document.getElementById('hdr-r-type').value;
@@ -361,9 +381,7 @@ function balanceColumns(block, colWidth, styleObj, snapshot, availableHeight = I
     }
   }
 
-  // לא לחתוך שורה בדיוק בתוך טווח מסומן-delimiter (למשל "[...]") של הערת-שוליים/
-  // סיום — אחרת הפתיח והסיום של אותה הערה ייפלו לשני צדי החלוקה, אף חצי לא
-  // ייסגר כראוי, וההערה תיעלם בשקט בלי סימון ובלי רישום ברשימת ההערות.
+  // מניעת חיתוך בתוך טווח הערה (delimiter)
   const validSplitPoints = splitPoints.filter(sp => {
     if (sp.lineIndex > 0) {
       const item = items[sp.itemIndex];
@@ -414,7 +432,7 @@ function balanceColumns(block, colWidth, styleObj, snapshot, availableHeight = I
       let item = items[sp.itemIndex];
       let pLeft = document.createElement('p');
       pLeft.className = 'p-end';
-      let leftText = sp.lines.slice(sp.lineIndex).join(' ');
+      let leftText = sp.lines.slice(bestSplit.lineIndex).join(' ');
       pLeft.innerHTML = createDropWord(leftText, true, false);
       lCol.appendChild(pLeft);
     }
@@ -496,8 +514,6 @@ function balanceColumns(block, colWidth, styleObj, snapshot, availableHeight = I
     appendItemFinal(lCol, lMargin, items[i], false, false, null, items[i].isCont);
   }
 
-  // איזון קוסמטי (מתיחת ריווח-שורות בטור הקצר) רק אם התוצאה עדיין נכנסת בגובה
-  // שנותר בעמוד — אחרת עלול "לדחוף" גם את הטור הקצר לתוך אזור הערות-השוליים.
   let finalDiff = rCol.scrollHeight - lCol.scrollHeight;
   if (Math.max(rCol.scrollHeight, lCol.scrollHeight) <= availableHeight) {
     if (finalDiff > 2 && finalDiff <= 60) {
@@ -555,11 +571,6 @@ function finalizeNotePositions(notesList, columnBoundaryHeight) {
   });
 }
 
-// מוצאת את כל טווחי ה-delimiter (למשל "[...]") בטקסט נתון, עבור הסימון
-// המובנה להערת-שוליים (fn-delim-open/close) וכל סגנונות ה-delimiterPair
-// המיובאים שמתאימים ל-hostContextKey. מוחזר מערך {start, end, inst} ממוין
-// וללא חפיפות — משמש גם ל-applyDelimiterStyles וגם ל-balanceColumns, כדי
-// שנקודת-חלוקה בין טורים לא "תחתוך" הערה כזו באמצע (ר' noteSpans).
 function findDelimiterMatches(text, hostContextKey) {
   const activeStyles = [];
 
@@ -818,7 +829,12 @@ function flushEndnotesForPart(container, pIdx) {
 function measureNoteBlockHeight(queue, columns) {
   if (!queue.length) return 0;
   const probe = buildNoteBlockElement(queue, columns);
-  probe.style.position = 'absolute'; probe.style.visibility = 'hidden'; probe.style.width = '160mm';
+  probe.style.position = 'absolute'; probe.style.visibility = 'hidden';
+  // רוחב המדידה מותאם בדיוק לרוחב גוף הטקסט (ללא הערות הצד)
+  const wMargin = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--w-margin')) || 7.5;
+  const wGap = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--w-gap')) || 2;
+  const pct = 100 - 2 * (wMargin + wGap);
+  probe.style.width = `calc(180mm * ${pct / 100})`;
   document.body.appendChild(probe);
   const h = probe.getBoundingClientRect().height;
   document.body.removeChild(probe);
@@ -902,7 +918,6 @@ function buildStructuredTOC(tokenList, showLevels, groupLevels) {
   flushGroup();
   return entries;
 }
-
 function renderPaginatedTOC(container, entries, titleText, bookTitle, h1Title, pageIndex, curH1, curH2, tocPrefix) {
   if (entries.length === 0) return 0;
 
@@ -939,6 +954,7 @@ function renderPaginatedTOC(container, entries, titleText, bookTitle, h1Title, p
 
     const page = document.createElement('div');
     page.className = 'a4-page toc-page';
+    page.setAttribute('data-page-index', String(pageIndex + pagesCount - 1));
     applyContentBg(page, isFirstTOCPage ? 'tocFirst' : 'tocRegular');
     lastRenderedPage = page;
     
@@ -1040,10 +1056,36 @@ function typesetDocument() {
   footnoteQueueForPage = [];
   endnoteQueueForPart = [];
 
+  const pageBreaks = [];
+  const recordedBreakLines = new Set();
+
+  function recordPageBreak(pNum, lineIdx) {
+    if (lineIdx === undefined || lineIdx === null || lineIdx < 0) return;
+    if (pNum <= 1 || recordedBreakLines.has(lineIdx)) return;
+    recordedBreakLines.add(lineIdx);
+    pageBreaks.push({
+      pageNum: pNum,
+      gematria: toGematria(pNum),
+      lineIdx: lineIdx
+    });
+  }
+
   let rawText = document.getElementById('raw-input').value;
   if (!rawText.trim()) return;
 
+  // 1. סינון הערות עריכה (##...##) מכלל המסמך
+  rawText = stripEditorialNotes(rawText);
   rawText = parseMetadataFromText(rawText);
+
+  // 2. פקדי מיספור סימנים לכותרת 2 ועיטורי כותרות מורחבים
+  const autoSimanH2 = document.getElementById('h2-auto-siman')?.checked ?? false;
+  const resetSimanOnH1 = document.getElementById('h2-reset-siman')?.checked ?? true;
+  let simanCounter = 0;
+
+  const h2OrnTopStyle = document.getElementById('h2-ornament-top-style')?.value || 'none';
+  const h2OrnBtmStyle = document.getElementById('h2-ornament-bottom-style')?.value || 'none';
+  const h3OrnR = document.getElementById('h3-ornament-r')?.value || 'none';
+  const h3OrnL = document.getElementById('h3-ornament-l')?.value || 'none';
 
   const container = document.getElementById('book-container');
   container.innerHTML = '';
@@ -1052,6 +1094,7 @@ function typesetDocument() {
 
   const lines = rawText.split('\n');
   const tokens = [];
+  globalTokens = tokens;
   let pendingSideNote = null;
   let pendingSideNoteStyleId = null;
   let pendingEndNote = null;
@@ -1264,8 +1307,18 @@ function typesetDocument() {
       if (hasOpenPart) { flushEndnotesForPart(container, pageIndex); renderExtAnchor(container, 'endOfEachPart', rawText); }
       renderExtAnchor(container, 'beforeEachPart', rawText);
       hasOpenPart = true;
+
+      // איפוס מונה הסימנים בעת מעבר לחלק חדש
+      if (resetSimanOnH1) simanCounter = 0;
+
       ensureOddPageStart(sec.token.level);
       renderSubShaar(container, sec.token, activeThemeId);
+      const subShaarPage = container.lastElementChild;
+      if (subShaarPage) {
+        subShaarPage.setAttribute('data-page-index', String(pageIndex));
+        subShaarPage.setAttribute('data-first-line-idx', String(sec.token.lineIdx));
+      }
+      recordPageBreak(pageIndex, sec.token.lineIdx);
       if (sec.token.customStyleId) {
         const inst = findExtTextStyle(sec.token.customStyleId);
         const justRendered = container.lastElementChild;
@@ -1317,9 +1370,21 @@ function typesetDocument() {
     }
 
     let isFirstPage = true;
-    let h2Text = sec.isNewPage ? sec.hToken.text : '';
+    let rawH2Text = sec.isNewPage ? sec.hToken.text : '';
     let h2Id = sec.isNewPage ? sec.hToken.id : undefined;
     let isH0 = sec.isNewPage && sec.hToken.level === 0;
+
+    let simanLabel = '';
+    let displayH2Text = rawH2Text;
+    let h2Text = rawH2Text;
+
+    // חישוב מיספור סימנים אוטומטי לכותרת 2
+    if (autoSimanH2 && sec.isNewPage && sec.hToken && sec.hToken.level === 2) {
+      simanCounter++;
+      simanLabel = 'סימן ' + toGematria(simanCounter);
+      displayH2Text = rawH2Text.replace(/^סימן\s+[א-ת]+[:\-–—\s]*/i, '').trim();
+      h2Text = simanLabel + (displayH2Text ? ' - ' + displayH2Text : '');
+    }
 
     if (h2Text) {
       currentH2Title = h2Text;
@@ -1329,8 +1394,6 @@ function typesetDocument() {
     let secTokens = sec.tokens.slice();
     let tokenIndex = 0;
     let pendingWordTokens = null;
-    const sectionFillRatio = (document.getElementById('balance-chapter-end').value === 'yes')
-      ? estimateSectionFillRatio(secTokens) : 1;
 
     while (tokenIndex < secTokens.length || pendingWordTokens) {
       if (prevPageEl) flushFootnotesInto(prevPageEl);
@@ -1350,24 +1413,74 @@ function typesetDocument() {
       );
       pageIndex++;
       prevPageEl = pageLayout.page;
+
+      const firstLineIdxOnPage = (isFirstPage && h2Text && sec.hToken)
+        ? sec.hToken.lineIdx
+        : (pendingWordTokens ? pendingWordTokens.token.lineIdx : (secTokens[tokenIndex] ? secTokens[tokenIndex].lineIdx : null));
+
+      if (firstLineIdxOnPage !== null && firstLineIdxOnPage !== undefined) {
+        pageLayout.page.setAttribute('data-first-line-idx', String(firstLineIdxOnPage));
+        recordPageBreak(pageIndex - 1, firstLineIdxOnPage);
+      }
       
-      let remPageHeight = pageLayout.bodyFlow.clientHeight * sectionFillRatio;
+      // תיקון: גובה העמוד הזמין מחושב במלואו עד לתחתית הדף (ללא קיטום מלאכותי)
+      let totalFlowH = pageLayout.bodyFlow.clientHeight || 870;
+      let used = 0;
       if (isFirstPage && h2Text) {
          const spacer = pageLayout.bodyFlow.querySelector('.h2-spacer');
          const title = pageLayout.bodyFlow.querySelector('.title-level-2-standalone');
-         if (title && sec.hToken.customStyleId) {
-            const inst = findExtTextStyle(sec.hToken.customStyleId);
-            if (inst) renderCustomHeadingInto(title, inst, h2Text);
-         }
-         let used = 0;
-         if (spacer) used += spacer.getBoundingClientRect().height;
          if (title) {
-             used += title.getBoundingClientRect().height;
-             const titleStyle = window.getComputedStyle(title);
-             used += parseFloat(titleStyle.marginTop) + parseFloat(titleStyle.marginBottom);
+            if (sec.hToken.customStyleId) {
+               const inst = findExtTextStyle(sec.hToken.customStyleId);
+               if (inst) renderCustomHeadingInto(title, inst, displayH2Text || h2Text);
+            } else if (displayH2Text) {
+               title.textContent = displayH2Text;
+            }
+
+            // הוספת שורת סימן מעל כותרת 2
+            if (simanLabel) {
+               const simanElem = document.createElement('div');
+               simanElem.className = 'h2-siman-badge';
+               simanElem.textContent = simanLabel;
+               title.parentNode.insertBefore(simanElem, title);
+            }
+
+            // עיטור עליון לכותרת 2 (נבחר בנפרד)
+            if (h2OrnTopStyle && h2OrnTopStyle !== 'none') {
+               const topOrnHTML = getHeadingOrnamentHTML(h2OrnTopStyle);
+               if (topOrnHTML) {
+                  const ornWrap = document.createElement('div');
+                  ornWrap.className = 'h2-ornament-top';
+                  ornWrap.innerHTML = topOrnHTML;
+                  const insertBeforeEl = title.previousElementSibling?.classList.contains('h2-siman-badge')
+                     ? title.previousElementSibling : title;
+                  insertBeforeEl.parentNode.insertBefore(ornWrap, insertBeforeEl);
+               }
+            }
+
+            // עיטור תחתון לכותרת 2 (נבחר בנפרד)
+            if (h2OrnBtmStyle && h2OrnBtmStyle !== 'none') {
+               const btmOrnHTML = getHeadingOrnamentHTML(h2OrnBtmStyle);
+               if (btmOrnHTML) {
+                  const ornWrap = document.createElement('div');
+                  ornWrap.className = 'h2-ornament-bottom';
+                  ornWrap.innerHTML = btmOrnHTML;
+                  title.parentNode.insertBefore(ornWrap, title.nextSibling);
+               }
+            }
          }
-         remPageHeight -= used;
+
+         if (spacer) used += spacer.getBoundingClientRect().height;
+         const headerEls = pageLayout.bodyFlow.querySelectorAll('.h2-ornament-top, .h2-siman-badge, .title-level-2-standalone, .h2-ornament-bottom');
+         headerEls.forEach(el => {
+            used += el.getBoundingClientRect().height;
+            const st = window.getComputedStyle(el);
+            used += (parseFloat(st.marginTop) || 0) + (parseFloat(st.marginBottom) || 0);
+         });
       }
+
+      // הגובה הנותר ממלא בדיוק את כל אורך הדף עד למרחק הקבוע מהתחתית
+      let remPageHeight = isFirstPage ? (totalFlowH - used) : totalFlowH;
       isFirstPage = false;
 
       if (isH0) {
@@ -1511,6 +1624,17 @@ function typesetDocument() {
           if (peekTok.level === 3) currentH3Title = peekTok.text;
           const spanBlock = document.createElement('div');
           spanBlock.className = 'block-h3-span';
+
+          // עיטור צד ימין (ב-RTL יופיע ראשון מימין, צמוד לכותרת)
+          const ornRHTML = renderSideOrnamentHTML(h3OrnR, false);
+          if (ornRHTML) {
+            const ornR = document.createElement('div');
+            ornR.className = 'h3-ornament-right';
+            ornR.innerHTML = ornRHTML;
+            spanBlock.appendChild(ornR);
+          }
+
+          // טקסט הכותרת במרכז
           const spanTitle = document.createElement('div');
           spanTitle.className = 'h3-title-text';
           spanTitle.setAttribute('data-token-id', peekTok.id);
@@ -1523,6 +1647,16 @@ function typesetDocument() {
           }
           applyDelimiterStyles(spanTitle, 'h' + peekTok.level, getHostSizePt(peekTok.level, peekTok.customStyleId), false);
           spanBlock.appendChild(spanTitle);
+
+          // עיטור צד שמאל (ב-RTL יופיע משמאל, צמוד לכותרת)
+          const ornLHTML = renderSideOrnamentHTML(h3OrnL, true);
+          if (ornLHTML) {
+            const ornL = document.createElement('div');
+            ornL.className = 'h3-ornament-left';
+            ornL.innerHTML = ornLHTML;
+            spanBlock.appendChild(ornL);
+          }
+
           pageLayout.bodyFlow.appendChild(spanBlock);
 
           const spanHeight = spanBlock.getBoundingClientRect().height + 4;
@@ -1762,8 +1896,6 @@ function typesetDocument() {
           } else {
             let usedBlockH = Math.max(rCol.scrollHeight, lCol.scrollHeight);
             let finalDiff = rCol.scrollHeight - lCol.scrollHeight;
-            // איזון קוסמטי רק אם התוצאה עדיין נכנסת בגבול השארי בעמוד — אחרת
-            // עלול "לדחוף" גם את הטור הקצר לתוך אזור הערות-השוליים.
             if (usedBlockH <= remPageHeight) {
               if (finalDiff > 2 && finalDiff <= 60) {
                   justifyColumnVertically(lCol, rCol.scrollHeight, styleObj);
@@ -1791,4 +1923,12 @@ function typesetDocument() {
       span.textContent = headingPageMap[targetId];
     }
   });
+
+  if (typeof updateEditorWithPageBreaks === 'function') {
+    updateEditorWithPageBreaks(pageBreaks);
+  }
+
+  if (typeof updatePreviewScale === 'function') {
+    updatePreviewScale();
+  }
 }
