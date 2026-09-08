@@ -1,11 +1,15 @@
 /* ==========================================================================
-   app.js - ניהול ממשק משתמש, סרגל צד, קבצים ואתחול
+   app.js - ניהול ממשק משתמש, סרגל צד כפול, עורך טקסט חכם, זום ואתחול
    ========================================================================== */
 
 const resizer = document.getElementById('resizer');
 const sidebar = document.getElementById('sidebar');
+const editorElem = document.getElementById('raw-input');
 let isResizing = false;
 
+/* ==========================================================================
+   גרירת שינוי גודל לסרגל הבקרה
+   ========================================================================== */
 resizer.addEventListener('mousedown', () => {
   isResizing = true;
   resizer.classList.add('resizing');
@@ -16,8 +20,9 @@ resizer.addEventListener('mousedown', () => {
 window.addEventListener('mousemove', (e) => {
   if (!isResizing) return;
   const newWidth = document.body.clientWidth - e.clientX;
-  if (newWidth >= 360 && newWidth <= 800) {
+  if (newWidth >= 340 && newWidth <= 950) {
     sidebar.style.width = newWidth + 'px';
+    updatePreviewScale();
   }
 });
 
@@ -27,8 +32,32 @@ window.addEventListener('mouseup', () => {
     resizer.classList.remove('resizing');
     document.body.style.cursor = '';
     document.body.style.userSelect = '';
+    updatePreviewScale();
   }
 });
+
+/* ==========================================================================
+   כיווץ והרחבה של לוח ההגדרות
+   ========================================================================== */
+function toggleSettingsPane() {
+  const sp = document.getElementById('settings-pane');
+  if (!sp) return;
+  const isCollapsed = sp.classList.toggle('collapsed');
+  const icon = sp.querySelector('.collapse-icon');
+  if (icon) icon.textContent = isCollapsed ? '◀' : '▶';
+
+  // חישוב זום רספונסיבי מיידי עם תום אנימציית המעבר
+  setTimeout(() => {
+    updatePreviewScale();
+  }, 260);
+}
+
+function togglePanelBody(bodyId) {
+  const body = document.getElementById(bodyId);
+  if (body) {
+    body.style.display = (body.style.display === 'none') ? 'block' : 'none';
+  }
+}
 
 function toggleCbgSubRows(role, mode) {
   const rowColor = document.getElementById('row-cbg-' + role + '-color');
@@ -39,11 +68,246 @@ function toggleCbgSubRows(role, mode) {
   if (rowOp) rowOp.style.display = (mode === 'image') ? 'flex' : 'none';
 }
 
-function togglePanelBody(bodyId) {
-  const body = document.getElementById(bodyId);
-  if (body) {
-    body.style.display = (body.style.display === 'none') ? 'block' : 'none';
+/* ==========================================================================
+   ניהול עורך הטקסט, חילוץ טקסט נקי וחוצצי מעברי עמוד בלתי-מועתקים
+   ========================================================================== */
+
+function getCleanEditorText() {
+  const el = document.getElementById('raw-input');
+  if (!el) return '';
+  const clone = el.cloneNode(true);
+  clone.querySelectorAll('.page-break-divider').forEach(d => d.remove());
+  
+  const lineDivs = clone.querySelectorAll('.editor-line');
+  if (lineDivs.length > 0) {
+    const lines = [];
+    lineDivs.forEach(ld => {
+      lines.push(ld.innerText.replace(/\r\n/g, '').replace(/\n/g, ''));
+    });
+    return lines.join('\n');
   }
+  return clone.innerText.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+}
+
+function renderEditorContent(text, pageBreaks = []) {
+  const editor = document.getElementById('raw-input');
+  if (!editor) return;
+
+  const breakMap = {};
+  (pageBreaks || []).forEach(pb => {
+    if (pb && pb.lineIdx !== undefined && pb.pageNum > 1) {
+      breakMap[pb.lineIdx] = pb;
+    }
+  });
+
+  const lines = (text || '').split('\n');
+  const frag = document.createDocumentFragment();
+
+  lines.forEach((lineText, idx) => {
+    if (breakMap[idx]) {
+      const pb = breakMap[idx];
+      const div = document.createElement('div');
+      div.className = 'page-break-divider';
+      div.setAttribute('contenteditable', 'false');
+      div.setAttribute('data-page-num', pb.pageNum);
+      div.innerHTML = `
+        <span class="divider-badge">
+          <span class="badge-dot">●</span>
+          <span>מעבר עמוד — עמוד ${pb.gematria || pb.pageNum} (${pb.pageNum})</span>
+        </span>
+      `;
+      frag.appendChild(div);
+    }
+
+    const lineEl = document.createElement('div');
+    lineEl.className = 'editor-line';
+    lineEl.setAttribute('data-line-idx', idx);
+    if (!lineText) {
+      lineEl.innerHTML = '<br>';
+    } else {
+      lineEl.textContent = lineText;
+    }
+    frag.appendChild(lineEl);
+  });
+
+  editor.innerHTML = '';
+  editor.appendChild(frag);
+  updateEditorStats();
+}
+
+function updateEditorWithPageBreaks(pageBreaks) {
+  const clean = getCleanEditorText();
+  renderEditorContent(clean, pageBreaks);
+}
+
+function updateEditorStats() {
+  const statsEl = document.getElementById('editor-stats');
+  if (!statsEl) return;
+  const text = getCleanEditorText();
+  const lines = text.split('\n').length;
+  const words = text.trim() ? text.trim().split(/\s+/).length : 0;
+  statsEl.textContent = `${lines} שורות | ${words} מילים`;
+}
+
+// הגדרת Getter/Setter שקוף ל-value כך שכל הקוד הקיים ממשיך לעבוד
+Object.defineProperty(editorElem, 'value', {
+  get() {
+    return getCleanEditorText();
+  },
+  set(val) {
+    renderEditorContent(val || '', []);
+  },
+  configurable: true
+});
+
+// הגנה כפולה: מניעת העתקת חוצצי עמודים ל-Clipboard ב-Ctrl+C
+editorElem.addEventListener('copy', (e) => {
+  const sel = window.getSelection();
+  if (!sel || !sel.rangeCount) return;
+  let text = sel.toString();
+  text = text.replace(/מעבר עמוד — עמוד [^\n\r]+/g, '');
+  e.clipboardData.setData('text/plain', text);
+  e.preventDefault();
+});
+
+// הדבקת טקסט נקי בלבד ללא עיצובים זרים
+editorElem.addEventListener('paste', (e) => {
+  e.preventDefault();
+  const text = (e.clipboardData || window.clipboardData).getData('text/plain');
+  document.execCommand('insertText', false, text);
+  updateEditorStats();
+});
+
+editorElem.addEventListener('input', () => {
+  updateEditorStats();
+});
+
+/* ==========================================================================
+   ייבוא קובץ טקסט מהמחשב (.txt / .md)
+   ========================================================================== */
+function handleTxtFileImport(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    editorElem.value = e.target.result;
+    typesetDocument();
+  };
+  reader.readAsText(file);
+  event.target.value = '';
+}
+
+/* ==========================================================================
+   התמקדות וגלילה: לחיצה על דף במסמך גוללת לעורך
+   ========================================================================== */
+document.getElementById('book-container').addEventListener('click', (e) => {
+  const page = e.target.closest('.a4-page');
+  if (!page) return;
+
+  document.querySelectorAll('.a4-page.page-focused').forEach(p => p.classList.remove('page-focused'));
+  page.classList.add('page-focused');
+
+  const pageNum = page.getAttribute('data-page-index');
+  const firstLineIdx = page.getAttribute('data-first-line-idx');
+  let target = null;
+
+  if (pageNum) {
+    target = document.querySelector(`.page-break-divider[data-page-num="${pageNum}"]`);
+  }
+  if (!target && firstLineIdx !== null && firstLineIdx !== undefined) {
+    target = document.querySelector(`.editor-line[data-line-idx="${firstLineIdx}"]`);
+  }
+  if (!target && pageNum === '1') {
+    target = document.querySelector('.editor-line[data-line-idx="0"]');
+  }
+
+  if (target) {
+    target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    target.classList.add('editor-target-highlight');
+    setTimeout(() => {
+      target.classList.remove('editor-target-highlight');
+    }, 1800);
+  }
+});
+
+/* ==========================================================================
+   סנכרון סמן עריכה בעורך אל התצוגה המקדימה
+   ========================================================================== */
+function getActiveEditorLineIdx() {
+  const sel = window.getSelection();
+  if (!sel || !sel.anchorNode) return -1;
+  let node = sel.anchorNode;
+  if (node.nodeType === 3) node = node.parentElement;
+  const lineEl = node.closest('.editor-line');
+  if (lineEl && lineEl.hasAttribute('data-line-idx')) {
+    return parseInt(lineEl.getAttribute('data-line-idx'), 10);
+  }
+  return -1;
+}
+
+function syncCursorToPreview() {
+  const lineIdx = getActiveEditorLineIdx();
+  if (lineIdx === -1) return;
+
+  if (typeof lineToTokenMap !== 'undefined' && lineToTokenMap[lineIdx] !== undefined) {
+    let tokenId = lineToTokenMap[lineIdx];
+    if (tokenId === null) {
+      for (let k = lineIdx - 1; k >= 0; k--) {
+        if (lineToTokenMap[k] !== null && lineToTokenMap[k] !== undefined) {
+          tokenId = lineToTokenMap[k];
+          break;
+        }
+      }
+    }
+
+    if (tokenId !== null && tokenId !== undefined) {
+      const targetEl = document.querySelector(`[data-token-id="${tokenId}"]`);
+      if (targetEl) {
+        targetEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    }
+  }
+}
+
+editorElem.addEventListener('click', syncCursorToPreview);
+editorElem.addEventListener('keyup', (e) => {
+  if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'PageUp', 'PageDown', 'Home', 'End'].includes(e.key)) {
+    syncCursorToPreview();
+  }
+});
+
+/* ==========================================================================
+   זום רספונסיבי מלא לדפי A4 בתצוגה המקדימה (Fit-to-Width)
+   ========================================================================== */
+function updatePreviewScale() {
+  const previewPane = document.getElementById('preview-pane');
+  const bookContainer = document.getElementById('book-container');
+  if (!previewPane || !bookContainer) return;
+
+  const availW = previewPane.clientWidth - 40;
+  if (availW <= 50) return;
+
+  // רוחב תקני של A4 בפיקסלים (210 מ"מ ב-96 DPI)
+  const a4WidthPx = 793.7;
+  const scale = Math.max(0.25, availW / a4WidthPx);
+
+  document.documentElement.style.setProperty('--preview-scale', scale);
+
+  // פיצוי גובה וגלילה מדויק
+  const unscaledH = bookContainer.offsetHeight;
+  if (unscaledH > 0) {
+    const scaledH = unscaledH * scale;
+    bookContainer.style.marginBottom = `${scaledH - unscaledH + 40}px`;
+  }
+}
+
+window.addEventListener('resize', updatePreviewScale);
+
+if (window.ResizeObserver) {
+  const ro = new ResizeObserver(() => {
+    updatePreviewScale();
+  });
+  ro.observe(document.getElementById('preview-pane'));
 }
 
 /* ==========================================================================
@@ -417,13 +681,12 @@ function saveAsDefaultTemplate() {
     });
   });
 
-  const rawInputElem = document.getElementById('raw-input');
-  const prevVal = rawInputElem.value;
-  rawInputElem.innerHTML = '';
-  rawInputElem.value = '';
+  const prevVal = editorElem.value;
+  editorElem.innerHTML = '';
+  editorElem.value = '';
 
   const fullHtml = '<!DOCTYPE html>\n' + document.documentElement.outerHTML;
-  rawInputElem.value = prevVal;
+  editorElem.value = prevVal;
 
   const blob = new Blob([fullHtml], { type: 'text/html;charset=utf-8' });
   const a = document.createElement('a');
@@ -471,44 +734,7 @@ async function loadSystemFonts() {
 }
 
 /* ==========================================================================
-   סנכרון סמן עריכה לתצוגה המקדימה
-   ========================================================================== */
-const textarea = document.getElementById('raw-input');
-
-function syncCursorToPreview() {
-  const cursorPos = textarea.selectionStart;
-  const textBefore = textarea.value.substring(0, cursorPos);
-  const currentLineIdx = textBefore.split('\n').length - 1;
-
-  if (lineToTokenMap && lineToTokenMap[currentLineIdx] !== undefined) {
-    let tokenId = lineToTokenMap[currentLineIdx];
-    if (tokenId === null) {
-      for (let k = currentLineIdx - 1; k >= 0; k--) {
-        if (lineToTokenMap[k] !== null && lineToTokenMap[k] !== undefined) {
-          tokenId = lineToTokenMap[k];
-          break;
-        }
-      }
-    }
-
-    if (tokenId !== null && tokenId !== undefined) {
-      const targetEl = document.querySelector(`[data-token-id="${tokenId}"]`);
-      if (targetEl) {
-        targetEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      }
-    }
-  }
-}
-
-textarea.addEventListener('click', syncCursorToPreview);
-textarea.addEventListener('keyup', (e) => {
-  if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'PageUp', 'PageDown', 'Home', 'End'].includes(e.key)) {
-    syncCursorToPreview();
-  }
-});
-
-/* ==========================================================================
-   שחזור הגדרות תוספים ואירוע טעינה ראשוני (Bootstrap)
+   שחזור הגדרות תוספים ואירוע טעינה ראשוני
    ========================================================================== */
 function rehydrateExtImports() {
   const island = document.getElementById('ext-imports-data');
@@ -543,9 +769,8 @@ function rehydrateExtImports() {
 }
 
 /* ==========================================================================
-   טעינה אוטומטית של קובצי JSON ופונטים מתיקיית fonts
+   טעינה אוטומטית של קובצי JSON ופונטים (מעודכנת לתפריטים החדשים)
    ========================================================================== */
-
 async function loadExternalJSONAssets() {
   const assetsToLoad = [
     { file: 'shaar_main.json', type: 'shaar_main' },
@@ -559,7 +784,7 @@ async function loadExternalJSONAssets() {
   for (const asset of assetsToLoad) {
     try {
       const response = await fetch(asset.file);
-      if (!response.ok) continue; // הקובץ אינו קיים, ממשיכים הלאה
+      if (!response.ok) continue;
       const items = await response.json();
       if (!Array.isArray(items)) continue;
 
@@ -567,37 +792,52 @@ async function loadExternalJSONAssets() {
         if (asset.type === 'shaar_main') {
           registerExternalShaar('main', item.id, item.name, item.svg);
           appendOptionToSelect('active-theme-select', item.id, item.name, 'שערים ראשיים שנטענו');
+          appendOptionToSelect('select-shaar-main', item.id, item.name, 'שערים ראשיים מ-JSON');
         } else if (asset.type === 'shaar_sub') {
           registerExternalShaar('sub', item.id, item.name, item.svg);
           appendOptionToSelect('active-theme-select', item.id, item.name, 'שערי משנה שנטענו');
+          appendOptionToSelect('select-shaar-sub', item.id, item.name, 'שערי משנה מ-JSON');
         } else if (asset.type === 'shaar_back') {
           registerExternalShaar('back', item.id, item.name, item.svg);
           appendOptionToSelect('active-theme-select', item.id, item.name, 'שערים אחוריים שנטענו');
+          appendOptionToSelect('select-shaar-back', item.id, item.name, 'שערים אחוריים מ-JSON');
         } else if (asset.type === 'header') {
           registerExternalHeader(item.id, item.svg);
           appendOptionToSelect('hdr-c-type', item.id, item.name, 'עיטורי כותרת (JSON)');
           appendOptionToSelect('hdr-r-type', item.id, item.name, 'עיטורי כותרת (JSON)');
           appendOptionToSelect('hdr-l-type', item.id, item.name, 'עיטורי כותרת (JSON)');
+          appendOptionToSelect('h2-ornament-top-style', item.id, item.name, 'עיטורי כותרת (JSON)');
+          appendOptionToSelect('h2-ornament-bottom-style', item.id, item.name, 'עיטורי כותרת (JSON)');
+          appendOptionToSelect('h3-ornament-r', item.id, item.name, 'עיטורי כותרת (JSON)');
+          appendOptionToSelect('h3-ornament-l', item.id, item.name, 'עיטורי כותרת (JSON)');
         } else if (asset.type === 'divider') {
           registerExternalDivider(item.id, item.svg);
           appendOptionToSelect('section-divider-style', item.id, item.name, 'עיטורי סיום פרק (JSON)');
+          appendOptionToSelect('h2-ornament-top-style', item.id, item.name, 'עיטורי סיום פרק (JSON)');
+          appendOptionToSelect('h2-ornament-bottom-style', item.id, item.name, 'עיטורי סיום פרק (JSON)');
+          appendOptionToSelect('h3-ornament-r', item.id, item.name, 'עיטורי סיום פרק (JSON)');
+          appendOptionToSelect('h3-ornament-l', item.id, item.name, 'עיטורי סיום פרק (JSON)');
         } else if (asset.type === 'note_rule') {
           registerExternalNoteRule(item.id, item.svg);
           appendOptionToSelect('note-rule-style', item.id, item.name, 'מפרידי הערות (JSON)');
         }
       });
-      console.log(`נטענו בהצלחה ${items.length} פריטים מתוך ${asset.file}`);
-    } catch (e) {
-      // שקט - הקובץ פשוט לא נמצא
-    }
+    } catch (e) {}
   }
+}
+
+function syncThemeToIndividualShaars() {
+  const m = document.getElementById('select-shaar-main');
+  const b = document.getElementById('select-shaar-back');
+  const s = document.getElementById('select-shaar-sub');
+  if (m) m.value = 'theme_default';
+  if (b) b.value = 'theme_default';
+  if (s) s.value = 'theme_default';
 }
 
 function appendOptionToSelect(selectId, value, text, groupLabel) {
   const select = document.getElementById(selectId);
   if (!select) return;
-
-  // מניעת כפילויות
   if (select.querySelector(`option[value="${value}"]`)) return;
 
   let optgroup = select.querySelector(`optgroup[label="${groupLabel}"]`);
@@ -613,9 +853,6 @@ function appendOptionToSelect(selectId, value, text, groupLabel) {
   optgroup.appendChild(opt);
 }
 
-/* ==========================================================================
-   טעינה אוטומטית של פונטים מתוך fonts/fonts.json
-   ========================================================================== */
 async function loadExternalFonts() {
   try {
     const res = await fetch('fonts/fonts.json');
@@ -629,7 +866,6 @@ async function loadExternalFonts() {
         await fontFace.load();
         document.fonts.add(fontFace);
 
-        // הוספה לכל תיבות בחירת הגופנים בסרגל הצד
         document.querySelectorAll('.font-picker').forEach(select => {
           let grp = select.querySelector('optgroup[label="גופנים מקומיים (תיקיית fonts)"]');
           if (!grp) {
@@ -642,22 +878,15 @@ async function loadExternalFonts() {
           opt.textContent = font.family;
           grp.appendChild(opt);
         });
-      } catch (err) {
-        console.warn('שגיאה בטעינת גופן:', font.file, err);
-      }
+      } catch (err) {}
     }
-    console.log(`נטענו בהצלחה ${fonts.length} פונטים מתיקיית fonts!`);
-  } catch (e) {
-    // fonts.json לא קיים
-  }
+  } catch (e) {}
 }
 
-// עדכון פונקציית הטעינה הראשית של הדף
 window.onload = async function() {
   refreshCustomThemesUI();
   rehydrateExtImports();
 
-  // 1. טעינת ה-JSON-ים של ה-SVG והפונטים
   await loadExternalJSONAssets();
   await loadExternalFonts();
 
@@ -668,7 +897,7 @@ window.onload = async function() {
     document.getElementById('row-hdr-c-img').style.display = 'flex';
   }
 
-  textarea.value = `שם הספר - ספר מלכי המלוכה
+  editorElem.value = `שם הספר - ספר מלכי המלוכה
 נושא - ביאורים וחידושים עמוקים על מסכתות הש"ס
 נושא מפורט - בירור שיטות הראשונים והאחרונים ובירורי הלכות למעשה
 פרטי מהדורא - מהדורה שניה ומורחבת בסייעתא דשמיא
@@ -700,4 +929,284 @@ window.onload = async function() {
 גוף הטקסט המכיל הערות צד בשולי הדף. הערות אלו ממוקמות בדיוק מול הפסקה אליה הן מתייחסות, ובכך מאפשרות ללומד לעיין במקורות תוך כדי לימודו הרציף בגוף הספר.`;
 
   typesetDocument();
+  initVisualPickers();
 };
+
+/* ==========================================================================
+   כוונון אינטראקטיבי של תיבות שער בעכבר (Drag & Resize)
+   ========================================================================== */
+function toggleShaarBoxEditor() {
+  const cb = document.getElementById('enable-shaar-box-editor');
+  if (cb && !cb.checked) {
+    document.body.classList.add('hide-shaar-editor');
+  } else {
+    document.body.classList.remove('hide-shaar-editor');
+  }
+}
+
+function initShaarBoxResizer() {
+  let activeDrag = null;
+
+  document.addEventListener('mousedown', (e) => {
+    const dragBar = e.target.closest('.shaar-drag-bar');
+    const handle = e.target.closest('.shaar-resize-handle');
+    if (!dragBar && !handle) return;
+
+    const box = (dragBar || handle).closest('.theme-bounded-content');
+    const page = box ? box.closest('.a4-page') : null;
+    if (!box || !page) return;
+
+    e.preventDefault();
+    e.stopPropagation();
+
+    const pageRect = page.getBoundingClientRect();
+    const boxRect = box.getBoundingClientRect();
+
+    // המרת מיקומים נוכחיים למילימטרים לפי קנה המידה המדויק של הדף
+    const curTop = ((boxRect.top - pageRect.top) / pageRect.height) * 297;
+    const curBottom = ((pageRect.bottom - boxRect.bottom) / pageRect.height) * 297;
+    const curRight = ((pageRect.right - boxRect.right) / pageRect.width) * 210;
+    const curLeft = ((boxRect.left - pageRect.left) / pageRect.width) * 210;
+
+    activeDrag = {
+      box,
+      page,
+      shaarType: box.getAttribute('data-shaar-type') || 'main',
+      isMove: !!dragBar,
+      handleType: handle ? handle.getAttribute('data-handle') : null,
+      startX: e.clientX,
+      startY: e.clientY,
+      pageW: pageRect.width,
+      pageH: pageRect.height,
+      initTop: curTop,
+      initBottom: curBottom,
+      initRight: curRight,
+      initLeft: curLeft
+    };
+    document.body.style.userSelect = 'none';
+  });
+
+  window.addEventListener('mousemove', (e) => {
+    if (!activeDrag) return;
+    const dx_mm = ((e.clientX - activeDrag.startX) / activeDrag.pageW) * 210;
+    const dy_mm = ((e.clientY - activeDrag.startY) / activeDrag.pageH) * 297;
+
+    let { initTop, initBottom, initRight, initLeft, isMove, handleType, box, shaarType } = activeDrag;
+    let nTop = initTop, nBottom = initBottom, nRight = initRight, nLeft = initLeft;
+
+    if (isMove) {
+      nTop = Math.max(5, initTop + dy_mm);
+      nBottom = Math.max(5, initBottom - dy_mm);
+      nRight = Math.max(5, initRight - dx_mm);
+      nLeft = Math.max(5, initLeft + dx_mm);
+    } else if (handleType) {
+      if (handleType.includes('t')) nTop = Math.max(5, initTop + dy_mm);
+      if (handleType.includes('b')) nBottom = Math.max(5, initBottom - dy_mm);
+      if (handleType.includes('r')) nRight = Math.max(5, initRight - dx_mm);
+      if (handleType.includes('l')) nLeft = Math.max(5, initLeft + dx_mm);
+    }
+
+    box.style.top = nTop.toFixed(1) + 'mm';
+    box.style.bottom = nBottom.toFixed(1) + 'mm';
+    box.style.right = nRight.toFixed(1) + 'mm';
+    box.style.left = nLeft.toFixed(1) + 'mm';
+
+    // סנכרון מיידי לשדות המספריים בלוח ההגדרות
+    const tEl = document.getElementById(`builder-${shaarType}-top`);
+    const bEl = document.getElementById(`builder-${shaarType}-bottom`);
+    const rEl = document.getElementById(`builder-${shaarType}-right`);
+    const lEl = document.getElementById(`builder-${shaarType}-left`);
+    if (tEl) tEl.value = Math.round(nTop);
+    if (bEl) bEl.value = Math.round(nBottom);
+    if (rEl) rEl.value = Math.round(nRight);
+    if (lEl) lEl.value = Math.round(nLeft);
+  });
+
+  window.addEventListener('mouseup', () => {
+    if (activeDrag) {
+      activeDrag = null;
+      document.body.style.userSelect = '';
+    }
+  });
+}
+
+// קריאה להפעלת המאזינים בטעינת הדף
+initShaarBoxResizer();
+
+/* ==========================================================================
+   רכיב בחירה ויזואלי (Visual Card Selector)
+   מציג אלמנט/SVG ומעליו או תחתיו את שמו
+   ========================================================================== */
+
+const VISUAL_PICKER_TARGETS = [
+  'select-shaar-main',
+  'select-shaar-back',
+  'select-shaar-sub',
+  'active-theme-select',
+  'section-divider-style',
+  'h2-ornament-top-style',
+  'h2-ornament-bottom-style',
+  'h3-ornament-r',
+  'h3-ornament-l',
+  'hdr-c-type',
+  'hdr-r-type',
+  'hdr-l-type',
+  'note-rule-style'
+];
+
+function getItemPreviewHTML(selectId, value, text) {
+  if (selectId.includes('shaar') || selectId === 'active-theme-select') {
+    let type = selectId.includes('back') ? 'back' : selectId.includes('sub') ? 'sub' : 'main';
+    if (value === 'theme_default') {
+      return '<div class="vp-badge-theme">👑 לפי ערכה</div>';
+    }
+    if (typeof EXTERNAL_SHAAR_ASSETS !== 'undefined' && EXTERNAL_SHAAR_ASSETS[type] && EXTERNAL_SHAAR_ASSETS[type][value]) {
+      return '<div class="vp-shaar-thumb">' + EXTERNAL_SHAAR_ASSETS[type][value] + '</div>';
+    }
+    if (typeof BUILTIN_SHAAR_THEMES !== 'undefined' && BUILTIN_SHAAR_THEMES[value]) {
+      const t = BUILTIN_SHAAR_THEMES[value];
+      const html = (type === 'back' ? t.backHTML : type === 'sub' ? t.subHTML : t.mainHTML) || '';
+      return '<div class="vp-shaar-thumb">' + html + '</div>';
+    }
+    return '<div class="vp-badge-theme">🏛️ שער</div>';
+  }
+
+  if (selectId.includes('ornament') || selectId.includes('divider') || selectId.startsWith('hdr-')) {
+    if (value === 'none' || value === 'empty') {
+      return '<span class="vp-text-none">🚫 ללא</span>';
+    }
+    if (value === 'custom_img') {
+      return '<span class="vp-text-muted">🖼️ תמונה</span>';
+    }
+    if (value === 'diamonds') {
+      return '<span style="letter-spacing:2px; font-size:8.5pt;">◈ ❖ ◈</span>';
+    }
+    if (value === 'pyramid') {
+      return '<div style="font-size:7.5pt; letter-spacing:2px; line-height:1;">❖ ❖ ❖</div>';
+    }
+    if (typeof EXTERNAL_ALL_ORNAMENTS !== 'undefined' && EXTERNAL_ALL_ORNAMENTS[value]) {
+      return '<div class="vp-ornament-thumb">' + EXTERNAL_ALL_ORNAMENTS[value] + '</div>';
+    }
+    if (typeof HEADER_ORNAMENTS !== 'undefined' && HEADER_ORNAMENTS[value]) {
+      return '<div class="vp-ornament-thumb">' + HEADER_ORNAMENTS[value] + '</div>';
+    }
+    if (typeof SECTION_DIVIDERS !== 'undefined' && SECTION_DIVIDERS[value]) {
+      return '<div class="vp-ornament-thumb">' + SECTION_DIVIDERS[value] + '</div>';
+    }
+  }
+
+  if (selectId === 'note-rule-style') {
+    if (value === 'plain') {
+      return '<div style="border-top:1.5px solid #333; width:70%; margin:auto;"></div>';
+    }
+    if (value === 'none') {
+      return '<span class="vp-text-none">🚫 ללא קו</span>';
+    }
+    if (typeof NOTE_RULE_GLYPHS !== 'undefined' && NOTE_RULE_GLYPHS[value]) {
+      return '<span style="letter-spacing:2px; font-size:8.5pt; font-weight:bold;">' + NOTE_RULE_GLYPHS[value] + '</span>';
+    }
+  }
+
+  return '<span class="vp-text-fallback">' + (text || value) + '</span>';
+}
+
+function initVisualPickers() {
+  VISUAL_PICKER_TARGETS.forEach(selectId => {
+    refreshVisualPicker(selectId);
+  });
+}
+
+function refreshVisualPicker(selectId) {
+  const select = document.getElementById(selectId);
+  if (!select) return;
+
+  const isShaar = selectId.includes('shaar') || selectId === 'active-theme-select';
+
+  let wrap = document.getElementById('vp-wrap-' + selectId);
+  if (!wrap) {
+    wrap = document.createElement('div');
+    wrap.className = 'visual-picker-wrapper';
+    wrap.id = 'vp-wrap-' + selectId;
+    select.parentNode.insertBefore(wrap, select);
+    select.style.display = 'none';
+    wrap.appendChild(select);
+
+    const trig = document.createElement('button');
+    trig.type = 'button';
+    trig.className = 'visual-picker-trigger';
+    trig.id = 'vp-trig-' + selectId;
+    trig.onclick = (e) => {
+      e.stopPropagation();
+      toggleVisualPickerDropdown(selectId);
+    };
+    wrap.appendChild(trig);
+
+    const drop = document.createElement('div');
+    drop.className = 'visual-picker-dropdown';
+    drop.id = 'vp-drop-' + selectId;
+    wrap.appendChild(drop);
+  }
+
+  // עדכון כפתור הפתיחה (Trigger)
+  const selectedOpt = select.options[select.selectedIndex] || select.options[0];
+  const curVal = selectedOpt ? selectedOpt.value : '';
+  const curText = selectedOpt ? selectedOpt.textContent : '';
+
+  const trig = document.getElementById('vp-trig-' + selectId);
+  if (trig) {
+    trig.innerHTML = `
+      <div class="vp-trig-preview">${getItemPreviewHTML(selectId, curVal, curText)}</div>
+      <span class="vp-trig-label">${curText}</span>
+      <span class="vp-trig-arrow">▼</span>
+    `;
+  }
+
+  // יצירת גריד הכרטיסיות: [אלמנט ויזואלי למעלה] + [שם האלמנט תחתיו]
+  const drop = document.getElementById('vp-drop-' + selectId);
+  if (drop) {
+    let cardsHTML = '';
+    Array.from(select.options).forEach(opt => {
+      const isSel = (opt.value === curVal);
+      const prevHTML = getItemPreviewHTML(selectId, opt.value, opt.textContent);
+      cardsHTML += `
+        <div class="visual-card ${isSel ? 'selected' : ''} ${isShaar ? 'shaar-card' : 'ornament-card'}"
+             data-val="${opt.value}"
+             onclick="selectVisualPickerItem('${selectId}', '${opt.value}')">
+          <div class="visual-card-preview">${prevHTML}</div>
+          <div class="visual-card-name" title="${opt.textContent}">${opt.textContent}</div>
+          ${isSel ? '<div class="visual-card-check">✓</div>' : ''}
+        </div>
+      `;
+    });
+    drop.innerHTML = `<div class="visual-cards-grid ${isShaar ? 'shaar-grid' : 'ornament-grid'}">${cardsHTML}</div>`;
+  }
+}
+
+function toggleVisualPickerDropdown(selectId) {
+  const drop = document.getElementById('vp-drop-' + selectId);
+  if (!drop) return;
+  const isOpen = drop.classList.contains('open');
+  closeAllVisualPickers();
+  if (!isOpen) {
+    drop.classList.add('open');
+  }
+}
+
+function closeAllVisualPickers() {
+  document.querySelectorAll('.visual-picker-dropdown.open').forEach(d => d.classList.remove('open'));
+}
+
+function selectVisualPickerItem(selectId, val) {
+  const select = document.getElementById(selectId);
+  if (!select) return;
+  select.value = val;
+  select.dispatchEvent(new Event('change'));
+  refreshVisualPicker(selectId);
+  closeAllVisualPickers();
+}
+
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('.visual-picker-wrapper')) {
+    closeAllVisualPickers();
+  }
+});
